@@ -23,6 +23,8 @@ Keeps allows you to document in any way that suits you. Collaboratively, individ
 ---
  
 ## The Story
+
+[DEMO]([url](https://youtube.com/shorts/Or7TCw03vtc?is=QvvBKRVAGx11QHL6)): https://youtube.com/shorts/Or7TCw03vtc?is=QvvBKRVAGx11QHL6
  
 My roommate and I both studied abroad during college. We were discussing one night about the different ways we each documented that special chapter of our lives: she made a joint instagram account with her closest friends that she was abroad with, and I created a VSCO page, completely anonymous with a random username, and treated it like my own digital diary. It was like my own curated camera roll and it brought me so much joy to document in that way.
  
