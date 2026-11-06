@@ -36,7 +36,7 @@ I ultimately had to delete my VSCO account, as it is impossible for pages to be 
  
 My roommate ended up deleting instagram as a whole, because it is a place for distraction or broadcasting what you want others to know about you, rather than memory archiving.
  
-After this experience, I specified two main pain points that exist in the market today, and mapped out a solution that we think could fill this gap.
+After this experience, I specified two main gaps that exist in the market today, and mapped out a solution that could address this gap.
  
 ## The Solution
  
