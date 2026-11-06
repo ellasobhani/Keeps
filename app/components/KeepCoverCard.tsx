@@ -4,15 +4,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { getSignedMediaUrl } from "../lib/storage";
 import { SIGNED_URL_QUERY_OPTIONS, signedMediaUrlKey } from "../lib/signedUrlCache";
-import { colors, spacing, radii, typography } from "../theme/tokens";
+import { colors, spacing, radii } from "../theme/tokens";
 import type { Keep } from "../types/database";
 
-// Matches Profile's FlatList (numColumns=2, padding=lg, row gap=sm) — a
+// Matches Profile's FlatList (numColumns=3, padding=lg, row gap=xs) — a
 // fixed card width means a lone keep (or an odd count leaving one alone in
 // the last row) stays the same cell size instead of flex:1 stretching it.
-const NUM_COLUMNS = 2;
+// The title is deliberately not shown on the tile itself (see the design
+// system's gallery-grid mock) — tapping through to KeepDetail surfaces it
+// immediately via its own serif title.
+const NUM_COLUMNS = 3;
 const GRID_PADDING = spacing.lg;
-const GRID_GAP = spacing.sm;
+const GRID_GAP = spacing.xs;
 const CARD_WIDTH = (Dimensions.get("window").width - GRID_PADDING * 2 - GRID_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
 
 export default function KeepCoverCard({
@@ -45,17 +48,16 @@ export default function KeepCoverCard({
       ) : (
         <View style={[styles.cover, styles.coverPlaceholder]} />
       )}
-      <View style={styles.titleRow}>
-        <Text style={styles.title} numberOfLines={1}>
-          {keep.title}
-        </Text>
-        {keep.privacy_mode === "private" && (
-          <Ionicons name="lock-closed" size={11} color={colors.textPrimary} style={styles.lockIcon} />
-        )}
-        {keep.hidden_from_profile && (
-          <Ionicons name="eye-off-outline" size={11} color={colors.textSecondary} style={styles.lockIcon} />
-        )}
-      </View>
+      {(keep.privacy_mode === "private" || keep.hidden_from_profile) && (
+        <View style={styles.badgeRow}>
+          {keep.privacy_mode === "private" && (
+            <Ionicons name="lock-closed" size={12} color={colors.scrim} />
+          )}
+          {keep.hidden_from_profile && (
+            <Ionicons name="eye-off-outline" size={12} color={colors.scrim} />
+          )}
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -74,18 +76,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  titleRow: {
+  badgeRow: {
+    position: "absolute",
+    top: spacing.xs,
+    right: spacing.xs,
     flexDirection: "row",
-    alignItems: "center",
-    marginTop: spacing.sm,
-  },
-  title: {
-    flexShrink: 1,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.textPrimary,
-  },
-  lockIcon: {
-    marginLeft: spacing.xs,
+    gap: spacing.xs,
   },
 });

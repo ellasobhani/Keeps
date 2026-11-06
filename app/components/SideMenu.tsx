@@ -11,6 +11,10 @@ export type SideMenuItem = {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
+  // Shows a small dot on this item's icon — lets the menu point at exactly
+  // which destination has something new, instead of only the hamburger
+  // button knowing something, somewhere, changed.
+  badge?: boolean;
 };
 
 // No drawer navigator / gesture-handler in this project — a Modal + Animated
@@ -62,7 +66,10 @@ export default function SideMenu({
         <View style={styles.items}>
           {items.map((item) => (
             <Pressable key={item.key} style={styles.item} onPress={item.onPress}>
-              <Ionicons name={item.icon} size={20} color={colors.textPrimary} />
+              <View style={styles.itemIconWrap}>
+                <Ionicons name={item.icon} size={20} color={colors.textPrimary} />
+                {item.badge && <View style={styles.itemBadge} />}
+              </View>
               <Text style={styles.itemLabel}>{item.label}</Text>
             </Pressable>
           ))}
@@ -80,7 +87,7 @@ export default function SideMenu({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: colors.scrimLight,
   },
   panel: {
     position: "absolute",
@@ -100,6 +107,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     paddingVertical: spacing.md,
+  },
+  itemIconWrap: {
+    position: "relative",
+  },
+  itemBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: radii.pill,
+    backgroundColor: colors.danger,
   },
   itemLabel: {
     fontSize: typography.size.md,

@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     color: colors.textPrimary,
     marginBottom: spacing.md,
-    letterSpacing: 4,
+    letterSpacing: typography.letterSpacing.otp,
   },
   error: {
     color: colors.danger,
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   buttonText: {
     color: colors.textInverse,

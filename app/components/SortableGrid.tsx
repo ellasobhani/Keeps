@@ -208,6 +208,16 @@ function SortableGridItem({
     .onEnd(() => {
       isDraggingRef.current = false;
       setIsDragging(false);
+      // Snap explicitly to the last hovered cell instead of relying on the
+      // slot-tracking effect below — that effect only re-fires when this
+      // item's *own* orderIndex changes, so dropping back into the same
+      // cell you started in (a very common release) left the tile sitting
+      // wherever the finger let go instead of centered in the grid cell.
+      const finalSlot = slotPosition(lastIndex.current, numColumns, itemSize, gap);
+      posX.current = finalSlot.x;
+      posY.current = finalSlot.y;
+      Animated.spring(translateX, { ...SPRING, toValue: finalSlot.x }).start();
+      Animated.spring(translateY, { ...SPRING, toValue: finalSlot.y }).start();
       Animated.spring(scale, { ...SPRING, toValue: 1 }).start();
       onDragCommit();
     });

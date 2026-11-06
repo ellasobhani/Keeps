@@ -105,6 +105,7 @@ export default function Profile({ navigation }: Props) {
       key: "notifications",
       label: "Notifications",
       icon: "heart-outline",
+      badge: hasUnseenNotifications,
       onPress: () => {
         setIsMenuOpen(false);
         navigation.navigate("Notifications");
@@ -123,6 +124,7 @@ export default function Profile({ navigation }: Props) {
       key: "invites",
       label: "Invites",
       icon: "people-outline",
+      badge: hasPendingInvites,
       onPress: () => {
         setIsMenuOpen(false);
         navigation.navigate("Invites");
@@ -200,7 +202,7 @@ export default function Profile({ navigation }: Props) {
         style={styles.list}
         data={keeps}
         keyExtractor={(keep) => keep.id}
-        numColumns={2}
+        numColumns={3}
         contentContainerStyle={styles.listContent}
         columnWrapperStyle={styles.row}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
@@ -299,10 +301,10 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.lg,
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   row: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   header: {
     marginBottom: spacing.lg,
@@ -323,7 +325,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: typography.size.lg,
-    fontWeight: typography.weight.bold,
+    fontWeight: typography.weight.regular,
     color: colors.textPrimary,
   },
   statLabel: {
@@ -332,8 +334,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   name: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.bold,
+    fontFamily: typography.family.serif,
+    fontSize: typography.size.lg,
     color: colors.textPrimary,
   },
   handle: {

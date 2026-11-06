@@ -16,17 +16,15 @@ function mimeTypeOf(localUri: string, fallback: string): string {
   return new File(localUri).type || fallback;
 }
 
-// Uploads via a React Native FormData file part ({uri, name, type}) instead
-// of reading the whole file into a Uint8Array first (the old approach,
-// via expo-file-system's File#bytes). storage-js only special-cases Blob
-// and FormData bodies — anything else, including a raw Uint8Array, falls
-// through to being handed to fetch as a plain body, which RN's networking
-// bridge doesn't reliably serialize for binary payloads. That upload can
-// come back looking like a success (no `error`) while no object actually
-// lands in the bucket — the exact shape of a keep whose cover_photo_url
-// points at nothing. FormData with an RN-style {uri,...} part streams the
-// file from disk via the native layer instead, the same mechanism every
-// other RN image-upload flow relies on.
+// Uploads as a FormData body (storage-js only special-cases Blob and
+// FormData; a raw Uint8Array body used to come back "successful" from RN's
+// networking bridge with no object actually landing in the bucket).
+//
+// Since Expo SDK 55+, global fetch is expo/fetch, whose FormData encoder
+// (expo/src/winter/fetch/convertFormData.ts) does NOT accept RN-style
+// {uri, name, type} parts — it throws "Unsupported FormDataPart
+// implementation". It does accept any object with a `bytes()` method, so
+// the part reads the file via expo-file-system's File#bytes at send time.
 async function uploadFile(
   bucket: string,
   path: string,
@@ -34,8 +32,14 @@ async function uploadFile(
   contentType: string,
   options?: { upsert?: boolean }
 ): Promise<void> {
+  const file = new File(localUri);
+  const part = {
+    name: path.split("/").pop() ?? "upload",
+    type: contentType,
+    bytes: () => file.bytes(),
+  };
   const form = new FormData();
-  form.append("", { uri: localUri, name: path.split("/").pop() ?? "upload", type: contentType } as unknown as Blob);
+  form.append("", part as unknown as Blob);
   const { error } = await supabase.storage.from(bucket).upload(path, form, options);
   if (error) throw error;
 }

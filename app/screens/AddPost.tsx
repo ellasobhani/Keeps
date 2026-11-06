@@ -28,7 +28,7 @@ import CarouselChevron from "../components/CarouselChevron";
 import SortableGrid from "../components/SortableGrid";
 import PhotoEditor from "../components/PhotoEditor";
 import KeyboardAvoidingScreen from "../components/KeyboardAvoidingScreen";
-import { colors, spacing, radii, typography } from "../theme/tokens";
+import { colors, spacing, radii, typography, iconGlyphFix } from "../theme/tokens";
 import type { MediaType } from "../types/database";
 
 type Props = NativeStackScreenProps<AppStackParamList, "AddPost">;
@@ -258,11 +258,11 @@ export default function AddPost({ route, navigation }: Props) {
                         onPress={() => setEditingUri(item.uri)}
                         hitSlop={8}
                       >
-                        <Ionicons name="crop-outline" size={14} color={colors.textInverse} />
+                        <Ionicons name="crop-outline" size={14} color={colors.textInverse} style={iconGlyphFix(14)} />
                       </Pressable>
                     )}
                     <Pressable style={styles.trashBadge} onPress={() => removeMedia(item.uri)} hitSlop={8}>
-                      <Ionicons name="trash-outline" size={14} color={colors.textInverse} />
+                      <Ionicons name="trash-outline" size={14} color={colors.textInverse} style={iconGlyphFix(14)} />
                     </Pressable>
                   </>
                 )}
@@ -280,7 +280,7 @@ export default function AddPost({ route, navigation }: Props) {
                   ]}
                   onPress={addMoreMedia}
                 >
-                  <Ionicons name="add" size={28} color={colors.textSecondary} />
+                  <Ionicons name="add" size={28} color={colors.textSecondary} style={iconGlyphFix(28)} />
                 </Pressable>
               )}
             </View>
@@ -358,7 +358,7 @@ export default function AddPost({ route, navigation }: Props) {
             <View style={styles.addonHeader}>
               <Text style={styles.addonTitle}>Song</Text>
               <Pressable onPress={clearSong} hitSlop={8}>
-                <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                <Ionicons name="trash-outline" size={16} color={colors.danger} style={iconGlyphFix(16)} />
               </Pressable>
             </View>
             <TextInput
@@ -396,7 +396,7 @@ export default function AddPost({ route, navigation }: Props) {
             <View style={styles.addonHeader}>
               <Text style={styles.addonTitle}>Location</Text>
               <Pressable onPress={clearLocation} hitSlop={8}>
-                <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                <Ionicons name="trash-outline" size={16} color={colors.danger} style={iconGlyphFix(16)} />
               </Pressable>
             </View>
             <TextInput
@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: colors.scrim,
   },
   editBadge: {
     position: "absolute",
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: colors.scrim,
   },
   videoPlaceholder: {
     backgroundColor: colors.textPrimary,
@@ -518,7 +518,7 @@ const styles = StyleSheet.create({
     left: "50%",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: colors.scrim,
   },
   backLink: {
     marginBottom: spacing.md,

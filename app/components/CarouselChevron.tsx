@@ -1,6 +1,6 @@
 import { View, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { spacing, radii } from "../theme/tokens";
+import { colors, spacing, radii } from "../theme/tokens";
 
 // Tiny swipe affordance for horizontal carousels — points toward more
 // content, hidden at whichever end has nothing further to reveal.
@@ -10,7 +10,7 @@ export default function CarouselChevron({ direction }: { direction: "left" | "ri
       <Ionicons
         name={direction === "left" ? "chevron-back" : "chevron-forward"}
         size={14}
-        color="#FFFFFF"
+        color={colors.textInverse}
       />
     </View>
   );
@@ -26,7 +26,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: colors.scrim,
   },
   left: {
     left: spacing.sm,
