@@ -1,6 +1,93 @@
 # Keeps
 
 A social scrapbook app. A **Keep** is a collection, like a trip, a season or a friendship. Each Keep holds **posts** with photos, short videos, captions, a song and a location. A Keep can be private (only invited co-owners can see it) or public (anyone can find and follow it), and several people can co-own the same Keep.
+ 
+> Short for keepsake: digital, living, collaborative scrapbooks.
+ 
+Keeps allows you to document in any way that suits you. Collaboratively, individually, privately, publicly. Without distraction.
+ 
+---
+ 
+## Table of Contents
+ 
+- [The Story](#the-story)
+- [The Problem](#the-problem)
+- [The Solution](#the-solution)
+- [How Keeps Compares](#how-keeps-compares)
+- [Validation](#validation)
+- [Building the Prototype](#building-the-prototype)
+- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+- [Roadmap](#roadmap)
+---
+ 
+## The Story
+ 
+My roommate and I both studied abroad during college. We were discussing one night about the different ways we each documented that special chapter of our lives: she made a joint instagram account with her closest friends that she was abroad with, and I created a VSCO page, completely anonymous with a random username, and treated it like my own digital diary. It was like my own curated camera roll and it brought me so much joy to document in that way.
+ 
+We reflected on how much fun it would be to physically sit down and scrapbook everything as a way to slow down and enjoy our lives and memories, but that this simply isn't realistic for our daily lives and that this exact type of activity should exist digitally, in a way that doesn't aim to suck all your time and attention away from you.
+ 
+## The Problem
+ 
+I ultimately had to delete my VSCO account, as it is impossible for pages to be made private, and strangers were liking my images that I felt were personal.
+ 
+My roommate ended up deleting instagram as a whole, because it is a place for distraction or broadcasting what you want others to know about you, rather than memory archiving.
+ 
+After this experience, I specified two main pain points that exist in the market today, and mapped out a solution that we think could fill this gap.
+ 
+## The Solution
+ 
+The solution is called **Keeps**, short for keepsake: digital, living, collaborative scrapbooks.
+ 
+The idea behind Keeps is to provide a place for people who want to archive their lives without all the distractions. This is ideal for both of our use cases:
+ 
+- **Me**, someone who just wanted a curated camera roll-type space that could be completely mine.
+- **Or for my roommate** who wanted a shared archive with her friends.
+## How Keeps Compares
+ 
+This idea is kind of like **Instagram** meets **VSCO** meets **Apple Shared Albums**.
+ 
+### Instagram
+ 
+Instagram has turned into an ad platform and attention-suck. You might create a private account to archive, but end up accidentally doomscrolling for 4 hours a day instead. We wanted a more wholesome space for people to peacefully archive rather than bombarding their brains with an unlimited stream of content.
+ 
+### VSCO
+ 
+VSCO has no option for private pages, or collaborative pages, and no ability to post anything other than singular photos.
+ 
+### Apple Shared Albums
+ 
+Apple Shared Albums has the ability to create shared albums with comments, but it is a more sterile type of space to mass dump photos and not an app people feel welcomed to archive and curate in. There is also no ability to aggregate albums under a singular profile and no way to design pages creatively or post multimedia content (music, map pins, voice notes, etc.)
+ 
+## Validation
+ 
+Before moving forward, I conducted **5 interviews** amongst our social network, careful to not say what I was thinking of building, but just to gauge whether this was something that there is demand for.
+ 
+> All 5 people I interviewed expressed extreme disdain for Instagram and liked the idea of digital scrapbooking.
+ 
+## Building the Prototype
+ 
+As my background is software engineering, I went on to prototype the idea and came out with an early version of our app.
+ 
+- I tracked all the bugs in a Notion page.
+- I went back and forth with my roommate to discuss features we were both thinking of, tradeoffs we need to make, what should exist in version 1 versus what we'd eventually like in version 10.
+- We passed the app along to our friends and had them "roast" it.
+- I iterated with the feedback.
+## Key Features
+ 
+Some of my favorite features we came up with are:
+ 
+- **A feed that ends.** There is a feed section to see all the most recent posts, once you've seen every new post from a page you follow, then the feed ends. No unlimited scroll, just a check mark saying you're all caught up. ✅
+- **Post without the pressure.** When you post, there is an option to not show on people's feed. Takes away any posting anxiety that is getting in the way of your archiving.
+- **Pages, not people.** You follow pages not people.
+### Two Ways to Keep
+ 
+| Collaborative Keep | Individual Keep |
+| --- | --- |
+| A collaborative Keep stays alive as different people add their own memories and perspectives over time. | An individual Keep gives you a corner of the internet to make your own, peacefully and with all the necessary tools and features to color your memory in a way most meaningful to you. |
+ 
+---
 
 ## Architecture
 
@@ -166,10 +253,6 @@ Built so far:
 - [x] Search for profiles and Keeps
 - [x] Blurhash placeholders and batched signed URLs for fast-loading grids
 
-Still to do for v1:
-
-- [ ] Public-mode engagement: like counts and threaded comment replies
-- [ ] Friend testing with a small group (3–6 people) through Expo Go / TestFlight (EAS Build)
 
 ### Future (Version 10)
 
