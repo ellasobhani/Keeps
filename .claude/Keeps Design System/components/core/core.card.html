@@ -1,0 +1,39 @@
+<!-- @dsCard group="Components" viewport="700x340" name="Core — Button, IconButton, Avatar" subtitle="Primary controls" -->
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ionicons/4.6.3/css/ionicons.min.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;padding:20px;font-family:var(--font-system);background:var(--bg-page)}.row{display:flex;gap:16px;align-items:center;margin-bottom:16px}</style>
+<div id="root"></div>
+<script type="text/babel">
+const { Button, IconButton, Avatar } = window.KeepsDesignSystem_5fa74b;
+function Demo(){
+  return (
+    <div>
+      <div className="row">
+        <Button label="Create keep" />
+        <Button label="Cancel" variant="secondary" />
+        <Button label="Post" variant="text" />
+        <Button label="Delete account" variant="danger" />
+        <Button label="Saving" loading />
+        <Button label="Disabled" disabled />
+      </div>
+      <div className="row">
+        <IconButton icon="ios-add" variant="solid" size={56} />
+        <IconButton icon="ios-menu" />
+        <IconButton icon="ios-heart" color="#B3261E" />
+        <IconButton icon="ios-bookmark" />
+        <IconButton icon="ios-log-out" color="var(--danger)" />
+      </div>
+      <div className="row">
+        <Avatar displayName="Ella Sobhani" size={72} />
+        <Avatar displayName="Maya Barr" size={56} />
+        <Avatar displayName="?" size={40} />
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+</script>

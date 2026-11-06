@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Keeps — Gallery Grid direction mocks</title>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ionicons/4.6.3/css/ionicons.min.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="./mockData.js"></script>
+<style>
+body{margin:0;font-family:var(--font-system)}
+.label{position:absolute;top:-40px;left:0;font-size:20px;font-weight:700;color:#1A1A1A}
+.phone{width:375px;height:812px;background:var(--bg-page);overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.15);position:relative;display:flex;flex-direction:column}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-secondary)}
+.keep-tile:hover .keep-tile-label{opacity:1}
+</style>
+</head>
+<body>
+<div style="position:absolute;left:80px;top:100px"><div class="label">Keep Detail (already applied)</div><div id="root-keep" class="phone"></div></div>
+<div style="position:absolute;left:560px;top:100px"><div class="label">Feed</div><div id="root-feed" class="phone"></div></div>
+<div style="position:absolute;left:1040px;top:100px"><div class="label">Search</div><div id="root-search" class="phone"></div></div>
+<div style="position:absolute;left:1520px;top:100px"><div class="label">Profile</div><div id="root-profile" class="phone"></div></div>
+<div style="position:absolute;left:2000px;top:100px"><div class="label">Photo Detail</div><div id="root-photo" class="phone"></div></div>
+<div style="position:absolute;left:2480px;top:100px"><div class="label">Create Keep</div><div id="root-create" class="phone"></div></div>
+<script type="text/babel">
+const { Avatar, IconButton, Button, LikeRow, CommentThread, CommentComposer, BottomNavBar, SideMenu } = window.KeepsDesignSystem_5fa74b;
+const { posts, keeps, people, profile } = window.KeepsMockData;
+const keep = keeps[0];
+const keepPosts = posts.filter(p => p.keep === keep.title);
+const post = posts[0];
+
+function AvatarStack({ names, onClick }) {
+  return (
+    <div onClick={onClick} style={{ display: "inline-flex", alignItems: "center", cursor: "pointer" }}>
+      {names.slice(0, 4).map((n, i) => (
+        <div key={n} style={{ marginLeft: i === 0 ? 0 : -8, border: "2px solid #fff", borderRadius: "50%" }}>
+          <Avatar displayName={n} size={22} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ManageCollaboratorsSheet({ open, onClose, people }) {
+  if (!open) return null;
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(20,20,18,0.35)", display: "flex", alignItems: "flex-end", zIndex: 10 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", width: "100%", borderRadius: "20px 20px 0 0", padding: "20px 24px 28px", boxSizing: "border-box" }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--border-hairline)", margin: "0 auto 16px" }} />
+        <div style={{ fontFamily: "var(--font-serif)", fontSize: 20, marginBottom: 4 }}>Collaborators</div>
+        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 16 }}>Anyone added can post and see everything in this keep.</div>
+        {people.map((n) => (
+          <div key={n} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0" }}>
+            <Avatar displayName={n} size={36} />
+            <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{n}</span>
+            <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{n === profile.displayName ? "Owner" : "Can post"}</span>
+          </div>
+        ))}
+        <Button label="Invite people" variant="secondary" style={{ width: "100%", boxSizing: "border-box", marginTop: 12 }} />
+      </div>
+    </div>
+  );
+}
+
+function KeepDetail() {
+  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const collaborators = [profile.displayName, "Maya Barr", "Iulia S", "Shawn Hussain"];
+  return (
+    <React.Fragment>
+      <div style={{ display: "flex", alignItems: "center", padding: "8px 16px" }}>
+        <IconButton icon="ios-arrow-back" />
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 24px" }}>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontFamily: "var(--font-serif)", fontSize: 26, color: "var(--text-primary)" }}>{keep.title}</span>
+            {keep.isPrivate && <i className="icon ion-ios-lock" style={{ fontSize: 14, color: "var(--text-secondary)" }}></i>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+            <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{keepPosts.length} memories · shared with</span>
+            <AvatarStack names={collaborators} onClick={() => setSheetOpen(true)} />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <MediaChips items={[{ icon: "ios-mic", label: "Voice notes" }, { icon: "ios-musical-notes", label: "Playlist" }, { icon: "ios-pin", label: "Location" }]} />
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 2 }}>
+          {[...keepPosts, ...keepPosts, ...keepPosts].map((p, i) => (<div key={i} style={{ aspectRatio: 1, background: "var(--surface-card)" }} />))}
+        </div>
+      </div>
+      <IconButton icon="ios-add" variant="solid" size={56} style={{ position: "absolute", right: 24, bottom: 24, boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }} />
+      <ManageCollaboratorsSheet open={sheetOpen} onClose={() => setSheetOpen(false)} people={collaborators} />
+    </React.Fragment>
+  );
+}
+
+function Feed() {
+  const [filter, setFilter] = React.useState("keeps");
+  const shown = filter === "keeps" ? posts.slice(0, 2) : posts;
+  return (
+    <React.Fragment>
+      <div style={{ padding: "56px 24px 12px" }}>
+        <span style={{ fontFamily: "var(--font-serif)", fontSize: 24, color: "var(--text-primary)" }}>Keeps</span>
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          {[{ k: "keeps", label: "My keeps" }, { k: "following", label: "Keeps + following" }].map(o => (
+            <div key={o.k} onClick={() => setFilter(o.k)} style={{ fontSize: 12, fontWeight: 600, padding: "6px 14px", borderRadius: 999, background: filter===o.k?"var(--text-primary)":"var(--surface-card)", color: filter===o.k?"#fff":"var(--text-secondary)", cursor: "pointer" }}>{o.label}</div>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 24px" }}>
+        {shown.map(p => (
+          <div key={p.id} style={{ paddingBottom: 20, marginBottom: 20, borderBottom: "1px solid var(--border-hairline)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <Avatar displayName={p.author} size={36} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{p.author}</div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{p.keep} · {p.time}</div>
+              </div>
+            </div>
+            <div style={{ width: "100%", aspectRatio: 1, background: "var(--surface-card)", borderRadius: 12, position: "relative" }}>
+              {p.mediaCount > 1 && <div style={{ position: "absolute", top: 8, right: 8, fontSize: 11, fontWeight: 600, color: "#fff", background: "rgba(20,20,18,0.5)", borderRadius: 999, padding: "2px 8px" }}>1/{p.mediaCount}</div>}
+            </div>
+            {p.caption && <div style={{ fontSize: 13, marginTop: 10 }}><span style={{ fontWeight: 700 }}>{p.author} </span>{p.caption}</div>}
+            <div style={{ marginTop: 8 }}><LikeRow likedByNames={p.likes} hasLiked={p.likes.length>0} isFavorited={false} /></div>
+          </div>
+        ))}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "32px 0", color: "var(--text-secondary)" }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--accent-muted)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--accent)", fontSize: 20 }}>✓</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>You're all caught up</div>
+          <div style={{ fontSize: 12 }}>New keeps and posts will show up here</div>
+        </div>
+      </div>
+      <BottomNavBar active="feed" />
+    </React.Fragment>
+  );
+}
+
+function Search() {
+  const publicKeeps = keeps.filter(k => !k.isPrivate);
+  return (
+    <React.Fragment>
+      <div style={{ flex: 1, overflowY: "auto", padding: "56px 24px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid var(--border-hairline)", borderRadius: "var(--radius-md)", padding: "0 16px" }}>
+          <i className="icon ion-ios-search" style={{ color: "var(--text-secondary)", fontSize: 16 }}></i>
+          <span style={{ padding: "14px 0", fontSize: 15, color: "var(--text-secondary)" }}>Search keeps and people</span>
+        </div>
+        <div style={{ marginTop: 24 }}>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>People</div>
+          {people.map(p => (<div key={p.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}><Avatar displayName={p.name} size={32} /><span style={{ fontSize: 15, fontWeight: 500 }}>{p.name}</span></div>))}
+        </div>
+        <div style={{ marginTop: 24 }}>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>Public keeps</div>
+          {publicKeeps.map(k => (<div key={k.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid var(--border-hairline)" }}><span style={{ fontSize: 15, fontWeight: 500 }}>{k.title}</span><i className="icon ion-ios-globe" style={{ fontSize: 14, color: "var(--text-secondary)" }}></i></div>))}
+        </div>
+      </div>
+      <BottomNavBar active="search" />
+    </React.Fragment>
+  );
+}
+
+function Profile() {
+  return (
+    <React.Fragment>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, padding: "8px 24px" }}><IconButton icon="ios-eye" /><IconButton icon="ios-menu" /></div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+          <Avatar displayName={profile.displayName} size={76} />
+          <div style={{ flex: 1, display: "flex", justifyContent: "space-around", marginLeft: 20 }}>
+            <div style={{ textAlign: "center" }}><div style={{ fontSize: 17, fontWeight: 400 }}>{keeps.length}</div><div style={{ fontSize: 12, color: "var(--text-secondary)" }}>keeps</div></div>
+            <div style={{ textAlign: "center" }}><div style={{ fontSize: 17, fontWeight: 400 }}>{profile.followerCount}</div><div style={{ fontSize: 12, color: "var(--text-secondary)" }}>followers</div></div>
+            <div style={{ textAlign: "center" }}><div style={{ fontSize: 17, fontWeight: 400 }}>{profile.followingCount}</div><div style={{ fontSize: 12, color: "var(--text-secondary)" }}>following</div></div>
+          </div>
+        </div>
+        <div style={{ fontFamily: "var(--font-serif)", fontSize: 20 }}>{profile.displayName}</div>
+        <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>@{profile.handle}</div>
+        <div style={{ fontSize: 13, marginTop: 8 }}>{profile.bio}</div>
+        <div style={{ height: 1, background: "var(--border-hairline)", margin: "20px 0 16px" }} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 2 }}>
+          {keeps.map(k => (
+            <div key={k.id} className="keep-tile" style={{ aspectRatio: 1, background: k.color, position: "relative", overflow: "hidden" }}>
+              {k.isPrivate && <i className="icon ion-ios-lock" style={{ position: "absolute", top: 6, right: 6, fontSize: 12, color: "rgba(0,0,0,0.5)", zIndex: 1 }}></i>}
+              <div className="keep-tile-label" style={{ position: "absolute", inset: 0, background: "rgba(20,20,18,0.45)", color: "#fff", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "flex-end", padding: 8, boxSizing: "border-box", opacity: 0, transition: "opacity .15s" }}>{k.title}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <BottomNavBar active="profile" />
+    </React.Fragment>
+  );
+}
+
+function MediaChips({ items }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {items.map(it => (
+        <div key={it.label} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 999, background: "var(--surface-card)", fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>
+          <i className={`icon ion-${it.icon}`} style={{ fontSize: 13, color: "var(--text-secondary)" }}></i>{it.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PhotoDetail() {
+  return (
+    <React.Fragment>
+      <div style={{ display: "flex", alignItems: "center", padding: "8px 16px" }}><IconButton icon="ios-arrow-back" /></div>
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ width: "100%", aspectRatio: 1, background: "var(--surface-card)" }} />
+        <div style={{ padding: "8px 24px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+          <LikeRow likedByNames={post.likes} hasLiked isFavorited={false} />
+          {post.caption && <div style={{ fontSize: 14 }}><span style={{ fontWeight: 700 }}>{post.author} </span>{post.caption}</div>}
+          <MediaChips items={[{ icon: "ios-mic", label: "Add voice note" }, { icon: "ios-musical-notes", label: "Add song" }, { icon: "ios-pin", label: "Add location" }]} />
+          <div style={{ height: 1, background: "var(--border-hairline)" }} />
+          <CommentThread comments={post.comments} />
+        </div>
+      </div>
+      <CommentComposer value="" onChange={()=>{}} onSubmit={()=>{}} />
+    </React.Fragment>
+  );
+}
+
+function CreateKeep() {
+  const [step, setStep] = React.useState("details");
+  const [privacy, setPrivacy] = React.useState("private");
+  const [onProfile, setOnProfile] = React.useState(true);
+  const opts = [{ k: "private", icon: "ios-lock", label: "Private", desc: "Only invited co-owners" }, { k: "public", icon: "ios-globe", label: "Public", desc: "Anyone can find it" }];
+  if (step === "cover") {
+    return (
+      <React.Fragment>
+        <div style={{ padding: "24px 24px 0" }}><span onClick={() => setStep("details")} style={{ fontSize: 14, color: "var(--text-secondary)" }}>Back</span></div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 24px", display: "flex", flexDirection: "column" }}>
+          <div style={{ fontFamily: "var(--font-serif)", fontSize: 24, marginBottom: 6 }}>Add a cover</div>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 20 }}>Choose a photo from your camera roll.</div>
+          <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 2, marginBottom: 20, overflowY: "auto" }}>
+            {Array.from({ length: 12 }).map((_, i) => (<div key={i} style={{ aspectRatio: 1, background: ["#DCE3DD","#EDEAE3","#E4E1DA","#F0EEE9","#E8D8B0","#CBB7C9"][i % 6] }} />))}
+          </div>
+          <Button label="Create keep" style={{ width: "100%", boxSizing: "border-box" }} />
+          <div style={{ textAlign: "center", fontSize: 12, color: "var(--text-secondary)", marginTop: 14 }}>You can skip this and add a cover later</div>
+        </div>
+      </React.Fragment>
+    );
+  }
+  return (
+    <React.Fragment>
+      <div style={{ padding: "24px 24px 0" }}><span style={{ fontSize: 14, color: "var(--text-secondary)" }}>Cancel</span></div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 24px" }}>
+        <div style={{ fontFamily: "var(--font-serif)", fontSize: 24, marginBottom: 28 }}>New keep</div>
+        <input placeholder="Untitled keep" style={{ width: "100%", boxSizing: "border-box", border: "none", borderBottom: "1px solid var(--border-hairline)", padding: "0 0 10px", fontSize: 22, marginBottom: 28, fontFamily: "var(--font-serif)", outline: "none" }} />
+        <div className="eyebrow" style={{ marginBottom: 10 }}>Privacy</div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+          {opts.map(o => (<div key={o.k} onClick={() => setPrivacy(o.k)} style={{ flex: 1, borderRadius: 12, padding: 14, border: `1.5px solid ${privacy===o.k?"var(--accent)":"var(--border-hairline)"}`, background: privacy===o.k?"var(--accent-muted)":"transparent" }}><i className={`icon ion-${o.icon}`} style={{ fontSize: 20, color: privacy===o.k?"var(--accent)":"var(--text-primary)" }}></i><div style={{ fontWeight: 700, fontSize: 14, margin: "8px 0 2px" }}>{o.label}</div><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{o.desc}</div></div>))}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderTop: "1px solid var(--border-hairline)", borderBottom: "1px solid var(--border-hairline)", marginBottom: 28 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>Show on profile</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>Appears in your keeps grid</div>
+          </div>
+          <div onClick={() => setOnProfile(!onProfile)} style={{ width: 44, height: 26, borderRadius: 999, background: onProfile ? "var(--accent)" : "var(--border-hairline)", position: "relative", cursor: "pointer", flexShrink: 0 }}>
+            <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: onProfile ? 21 : 3, transition: "left .15s" }} />
+          </div>
+        </div>
+        <Button label="Continue" style={{ width: "100%", boxSizing: "border-box" }} onClick={() => setStep("cover")} />
+      </div>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root-keep")).render(<KeepDetail/>);
+ReactDOM.createRoot(document.getElementById("root-feed")).render(<Feed/>);
+ReactDOM.createRoot(document.getElementById("root-search")).render(<Search/>);
+ReactDOM.createRoot(document.getElementById("root-profile")).render(<Profile/>);
+ReactDOM.createRoot(document.getElementById("root-photo")).render(<PhotoDetail/>);
+ReactDOM.createRoot(document.getElementById("root-create")).render(<CreateKeep/>);
+</script>
+</body></html>

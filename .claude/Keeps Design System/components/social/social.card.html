@@ -1,0 +1,25 @@
+<!-- @dsCard group="Components" viewport="700x320" name="Social — Like Row, Comment Thread, Composer" subtitle="Names-not-counts engagement" -->
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ionicons/4.6.3/css/ionicons.min.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;font-family:var(--font-system);background:var(--bg-page)}.pad{padding:20px}</style>
+<div id="root"></div>
+<script type="text/babel">
+const { LikeRow, CommentThread, CommentComposer } = window.KeepsDesignSystem_5fa74b;
+function Demo(){
+  const [val, setVal] = React.useState("");
+  return (
+    <div>
+      <div className="pad" style={{display:"flex",flexDirection:"column",gap:16}}>
+        <LikeRow likedByNames={["Maya", "Shawn", "Iulia"]} hasLiked isFavorited={false} />
+        <CommentThread comments={[{author:"Maya", body:"this is so cute!!"}, {author:"Shawn", body:"wish I was there"}]} />
+      </div>
+      <CommentComposer value={val} onChange={setVal} />
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+</script>

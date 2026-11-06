@@ -1,0 +1,27 @@
+<!-- @dsCard group="Components" viewport="700x260" name="Navigation — Bottom Bar, Side Menu" subtitle="Tab bar and slide-in menu" -->
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ionicons/4.6.3/css/ionicons.min.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;font-family:var(--font-system);background:var(--bg-page)}</style>
+<div id="root"></div>
+<script type="text/babel">
+const { BottomNavBar, SideMenu } = window.KeepsDesignSystem_5fa74b;
+function Demo(){
+  const [open, setOpen] = React.useState(true);
+  return (
+    <div style={{position:"relative",height:260}}>
+      <div style={{padding:20,fontSize:13,color:"var(--text-secondary)"}}>Tap the scrim to close the menu →</div>
+      <div style={{position:"absolute",bottom:0,left:0,right:0}}><BottomNavBar active="feed" /></div>
+      <SideMenu open={open} onClose={()=>setOpen(false)} items={[
+        {key:"notifications",label:"Notifications",icon:"ios-heart",onClick:()=>{}},
+        {key:"favorites",label:"Favorites",icon:"ios-bookmark",onClick:()=>{}},
+        {key:"invites",label:"Invites",icon:"ios-people",onClick:()=>{}},
+      ]} onSignOut={()=>{}} />
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+</script>

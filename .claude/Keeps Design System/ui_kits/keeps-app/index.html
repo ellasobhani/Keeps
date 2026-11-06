@@ -1,0 +1,23 @@
+<!-- @dsCard group="Keeps App" viewport="375x680" name="Keeps Mobile App" subtitle="Interactive click-through: sign in, profile, feed, keep detail, photo detail, search" -->
+<!-- @startingPoint section="Keeps App" subtitle="Full interactive click-through mobile app" viewport="375x680" -->
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ionicons/4.6.3/css/ionicons.min.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="./mockData.js"></script>
+<style>
+html,body{margin:0;height:100%;background:#ddd;font-family:var(--font-system)}
+#phone{width:375px;height:680px;margin:0 auto;background:var(--bg-page);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.2)}
+@media (min-width:376px){body{padding-top:0}}
+</style>
+<div id="phone"><div id="root" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div></div>
+<script type="text/babel" src="./SignInScreen.jsx"></script>
+<script type="text/babel" src="./ProfileScreen.jsx"></script>
+<script type="text/babel" src="./FeedScreen.jsx"></script>
+<script type="text/babel" src="./SearchScreen.jsx"></script>
+<script type="text/babel" src="./KeepDetailScreen.jsx"></script>
+<script type="text/babel" src="./PhotoDetailScreen.jsx"></script>
+<script type="text/babel" src="./CreateKeepScreen.jsx"></script>
+<script type="text/babel" src="./App.jsx"></script>

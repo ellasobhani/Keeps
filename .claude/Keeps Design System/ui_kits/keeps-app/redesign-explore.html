@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Keeps — redesign exploration</title>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ionicons/4.6.3/css/ionicons.min.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="./mockData.js"></script>
+<style>
+body{margin:0;font-family:var(--font-system)}
+.label{position:absolute;top:-40px;left:0;font-size:20px;font-weight:700;color:#1A1A1A}
+.sub{position:absolute;top:-14px;left:0;font-size:13px;color:#6B6B68}
+.phone{width:375px;background:var(--bg-page);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.15)}
+.screen{border-bottom:8px solid #ddd}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-secondary)}
+</style>
+</head>
+<body>
+<div id="a" style="position:absolute;left:80px;top:120px"><div class="label">Keep detail / Photo detail / Search</div><div class="sub">Editorial direction, refined — search now shows only people + public keeps, not your own</div><div id="root-a" class="phone"></div></div>
+<div id="c1" style="position:absolute;left:560px;top:120px"><div class="label">Create keep — C1 Banner</div><div class="sub">Cover is a short wide strip behind the title, not a dominant square</div><div id="root-c1" class="phone"></div></div>
+<div id="c2" style="position:absolute;left:1040px;top:120px"><div class="label">Create keep — C2 Circular</div><div class="sub">Small circular cover thumbnail beside title, like setting a profile photo</div><div id="root-c2" class="phone"></div></div>
+<div id="c3" style="position:absolute;left:1520px;top:120px"><div class="label">Create keep — C3 Deferred</div><div class="sub">No cover step up front at all — title + privacy only, add cover later from the keep</div><div id="root-c3" class="phone"></div></div>
+<script type="text/babel">
+const { Avatar, IconButton, Button, LikeRow, CommentThread, CommentComposer, CoverPhotoPicker } = window.KeepsDesignSystem_5fa74b;
+const { posts, keeps } = window.KeepsMockData;
+const keep = keeps[0];
+const keepPosts = posts.filter(p => p.keep === "Spring Break 2026").concat(posts[0]);
+const post = posts[0];
+const tones = ["#DDE7DC", "#F5F4F1", "#E4E1DA", "#EDEAE3", "#DCE3DD", "#F0EEE9"];
+
+function A_KeepDetail() {
+  return (
+    <div className="screen" style={{padding:"16px 20px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+        <IconButton icon="ios-arrow-back" />
+        <IconButton icon="ios-add" variant="solid" />
+      </div>
+      <div className="eyebrow">{keep.isPrivate ? "PRIVATE KEEP" : "PUBLIC KEEP"} · {keepPosts.length} POSTS</div>
+      <div style={{fontSize:28,fontWeight:700,color:"#1A1A1A",margin:"4px 0 20px"}}>{keep.title}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+        {keepPosts.map((p,i)=>(<div key={i} style={{aspectRatio:1,background:tones[i%tones.length],position:"relative"}}>
+          {p.mediaCount>1 && <div style={{position:"absolute",top:4,right:4,width:16,height:16,borderRadius:"50%",background:"rgba(0,0,0,0.4)"}} />}
+        </div>))}
+      </div>
+    </div>
+  );
+}
+function A_PhotoDetail() {
+  return (
+    <div className="screen" style={{position:"relative"}}>
+      <div style={{width:"100%",aspectRatio:1,background:tones[0]}} />
+      <IconButton icon="ios-arrow-back" style={{position:"absolute",top:16,left:16,background:"rgba(255,255,255,0.85)"}} />
+      <div style={{padding:"16px 20px"}}>
+        <div style={{fontSize:16,fontWeight:700,color:"#1A1A1A"}}>{post.author}</div>
+        <div style={{fontSize:12,color:"#6B6B68",marginBottom:12}}>{post.time} · Spring Break 2026</div>
+        <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--surface-card)",borderRadius:20,padding:"8px 14px",marginBottom:14}}>
+          <span style={{fontSize:18,color:"#B3261E"}}>♥</span>
+          <span style={{fontSize:13,color:"#1A1A1A",flex:1}}>Liked by <b>Maya</b> and 2 others</span>
+          <i className="icon ion-ios-bookmark" style={{fontSize:18,color:"#1A1A1A"}}></i>
+        </div>
+        <div className="eyebrow" style={{marginBottom:8}}>COMMENTS (2)</div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {post.comments.map((c,i)=>(<div key={i} style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+            <Avatar displayName={c.author} size={28} />
+            <div style={{fontSize:13}}><b>{c.author}</b> {c.body}</div>
+          </div>))}
+        </div>
+      </div>
+    </div>
+  );
+}
+function A_Search() {
+  return (
+    <div className="screen" style={{padding:"16px 20px",minHeight:200}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,border:"1px solid var(--border-hairline)",borderRadius:10,padding:"10px 14px",marginBottom:18}}>
+        <i className="icon ion-ios-search" style={{color:"#6B6B68"}}></i>
+        <span style={{color:"#9a9994",fontSize:14}}>Search keeps and people</span>
+      </div>
+      <div className="eyebrow" style={{marginBottom:8}}>RECENT</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:20}}>
+        {["Maya Barr","NYC weekends","Iulia S"].map(t=>(<div key={t} style={{fontSize:12,padding:"6px 12px",background:"var(--surface-card)",borderRadius:14,color:"#1A1A1A"}}>{t}</div>))}
+      </div>
+      <div className="eyebrow" style={{marginBottom:8}}>PEOPLE</div>
+      {["Maya Barr","Iulia S","Jordan K"].map(p=>(<div key={p} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0"}}>
+        <Avatar displayName={p} size={32} /><span style={{fontSize:14,fontWeight:500}}>{p}</span>
+      </div>))}
+      <div className="eyebrow" style={{margin:"12px 0 8px"}}>PUBLIC KEEPS</div>
+      {keeps.filter(k=>!k.isPrivate).slice(0,3).map(k=>(<div key={k.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid var(--border-hairline)"}}>
+        <div style={{width:40,height:40,background:tones[1],flexShrink:0}} />
+        <span style={{fontSize:14,fontWeight:500,flex:1}}>{k.title}</span>
+        <i className="icon ion-ios-globe" style={{fontSize:13,color:"#6B6B68"}}></i>
+      </div>))}
+    </div>
+  );
+}
+
+function C1_CreateKeep() {
+  const [privacy,setPrivacy]=React.useState("private");
+  return (
+    <div className="screen" style={{padding:"0 0 24px"}}>
+      <div style={{width:"100%",height:110,background:tones[2],position:"relative",display:"flex",alignItems:"flex-end",padding:"0 20px 14px",boxSizing:"border-box"}}>
+        <div style={{position:"absolute",top:12,right:12,width:30,height:30,borderRadius:"50%",background:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <i className="icon ion-ios-camera" style={{fontSize:15,color:"#1A1A1A"}}></i>
+        </div>
+        <div style={{fontSize:22,fontWeight:600,color:"#9a9994"}}>Untitled keep</div>
+      </div>
+      <div style={{padding:"20px 20px 0"}}>
+        <div className="eyebrow" style={{marginBottom:8}}>PRIVACY</div>
+        <div style={{display:"flex",gap:10,marginBottom:24}}>
+          {[{k:"private",icon:"ios-lock",label:"Private",desc:"Only invited co-owners"},{k:"public",icon:"ios-globe",label:"Public",desc:"Anyone can find it"}].map(o=>(
+            <div key={o.k} onClick={()=>setPrivacy(o.k)} style={{flex:1,padding:14,borderRadius:12,border:`1.5px solid ${privacy===o.k?"var(--accent)":"var(--border-hairline)"}`,background:privacy===o.k?"var(--accent-muted)":"transparent"}}>
+              <i className={`icon ion-${o.icon}`} style={{fontSize:20,color:privacy===o.k?"var(--accent)":"#1A1A1A"}}></i>
+              <div style={{fontWeight:700,fontSize:14,margin:"8px 0 2px"}}>{o.label}</div>
+              <div style={{fontSize:11,color:"#6B6B68"}}>{o.desc}</div>
+            </div>
+          ))}
+        </div>
+        <Button label="Create keep" style={{width:"100%",boxSizing:"border-box"}} />
+      </div>
+    </div>
+  );
+}
+function C2_CreateKeep() {
+  const [privacy,setPrivacy]=React.useState("private");
+  return (
+    <div className="screen" style={{padding:"20px 20px 24px"}}>
+      <div style={{fontSize:22,fontWeight:700,marginBottom:20}}>New keep</div>
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:24}}>
+        <div style={{width:56,height:56,borderRadius:"50%",background:tones[3],border:"1px solid var(--border-hairline)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,position:"relative"}}>
+          <i className="icon ion-ios-camera" style={{fontSize:18,color:"#6B6B68"}}></i>
+        </div>
+        <div style={{fontSize:18,fontWeight:600,color:"#9a9994",flex:1,borderBottom:"1px solid var(--border-hairline)",paddingBottom:6}}>Untitled keep</div>
+      </div>
+      <div className="eyebrow" style={{marginBottom:8}}>PRIVACY</div>
+      <div style={{display:"flex",gap:10,marginBottom:24}}>
+        {[{k:"private",icon:"ios-lock",label:"Private",desc:"Only invited co-owners"},{k:"public",icon:"ios-globe",label:"Public",desc:"Anyone can find it"}].map(o=>(
+          <div key={o.k} onClick={()=>setPrivacy(o.k)} style={{flex:1,padding:14,borderRadius:12,border:`1.5px solid ${privacy===o.k?"var(--accent)":"var(--border-hairline)"}`,background:privacy===o.k?"var(--accent-muted)":"transparent"}}>
+            <i className={`icon ion-${o.icon}`} style={{fontSize:20,color:privacy===o.k?"var(--accent)":"#1A1A1A"}}></i>
+            <div style={{fontWeight:700,fontSize:14,margin:"8px 0 2px"}}>{o.label}</div>
+            <div style={{fontSize:11,color:"#6B6B68"}}>{o.desc}</div>
+          </div>
+        ))}
+      </div>
+      <Button label="Create keep" style={{width:"100%",boxSizing:"border-box"}} />
+    </div>
+  );
+}
+function C3_CreateKeep() {
+  const [privacy,setPrivacy]=React.useState("private");
+  return (
+    <div className="screen" style={{padding:"24px 20px"}}>
+      <div style={{fontSize:22,fontWeight:700,marginBottom:24}}>New keep</div>
+      <div style={{fontSize:22,fontWeight:600,color:"#9a9994",borderBottom:"1px solid var(--border-hairline)",paddingBottom:8,marginBottom:28}}>Untitled keep</div>
+      <div className="eyebrow" style={{marginBottom:8}}>PRIVACY</div>
+      <div style={{display:"flex",gap:10,marginBottom:28}}>
+        {[{k:"private",icon:"ios-lock",label:"Private",desc:"Only invited co-owners"},{k:"public",icon:"ios-globe",label:"Public",desc:"Anyone can find it"}].map(o=>(
+          <div key={o.k} onClick={()=>setPrivacy(o.k)} style={{flex:1,padding:14,borderRadius:12,border:`1.5px solid ${privacy===o.k?"var(--accent)":"var(--border-hairline)"}`,background:privacy===o.k?"var(--accent-muted)":"transparent"}}>
+            <i className={`icon ion-${o.icon}`} style={{fontSize:20,color:privacy===o.k?"var(--accent)":"#1A1A1A"}}></i>
+            <div style={{fontWeight:700,fontSize:14,margin:"8px 0 2px"}}>{o.label}</div>
+            <div style={{fontSize:11,color:"#6B6B68"}}>{o.desc}</div>
+          </div>
+        ))}
+      </div>
+      <Button label="Create keep" style={{width:"100%",boxSizing:"border-box"}} />
+      <div style={{textAlign:"center",fontSize:12,color:"#6B6B68",marginTop:14}}>You can add a cover photo anytime from the keep</div>
+    </div>
+  );
+}
+function B_KeepDetail() {
+  return (
+    <div className="screen" style={{padding:"16px 20px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+        <IconButton icon="ios-arrow-back" size={36} />
+        <span style={{fontSize:17,fontWeight:700,flex:1}}>{keep.title}</span>
+        <span style={{fontSize:11,fontWeight:700,background:"var(--surface-card)",borderRadius:10,padding:"3px 9px"}}>{keepPosts.length}</span>
+      </div>
+      <div style={{fontSize:12,fontWeight:600,color:"#6B6B68",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>All posts</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:20}}>
+        {keepPosts.map((p,i)=>(<div key={i} style={{aspectRatio:1,background:"var(--surface-card)",border:"1px solid var(--border-hairline)",borderRadius:4}} />))}
+      </div>
+      <div style={{position:"sticky",bottom:0,background:"var(--bg-page)",borderTop:"1px solid var(--border-hairline)",padding:"12px 0",display:"flex",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer"}}>
+        <i className="icon ion-ios-add" style={{fontSize:18}}></i>
+        <span style={{fontSize:13,fontWeight:700}}>Add post</span>
+      </div>
+    </div>
+  );
+}
+function B_PhotoDetail() {
+  return (
+    <div className="screen">
+      <div style={{width:"100%",aspectRatio:1,background:"var(--surface-card)",border:"1px solid var(--border-hairline)"}} />
+      <div style={{padding:"14px 20px",borderBottom:"1px solid var(--border-hairline)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <Avatar displayName={post.author} size={28} />
+          <span style={{fontSize:13,fontWeight:700}}>{post.author}</span>
+          <span style={{fontSize:11,color:"#6B6B68"}}>{post.time}</span>
+        </div>
+      </div>
+      <div style={{padding:"12px 20px",borderBottom:"1px solid var(--border-hairline)"}}>
+        <LikeRow likedByNames={post.likes} hasLiked isFavorited={false} />
+      </div>
+      <div style={{padding:"12px 20px"}}>
+        {post.comments.map((c,i)=>(<div key={i} style={{display:"flex",gap:8,padding:"8px 0",borderBottom:i<post.comments.length-1?"1px solid var(--border-hairline)":"none"}}>
+          <Avatar displayName={c.author} size={24} />
+          <div style={{fontSize:13}}><b>{c.author}</b><br/>{c.body}</div>
+        </div>))}
+      </div>
+    </div>
+  );
+}
+function B_Search() {
+  const [tab,setTab]=React.useState("keeps");
+  return (
+    <div className="screen" style={{padding:"16px 20px",minHeight:220}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,border:"1px solid var(--border-hairline)",borderRadius:6,padding:"9px 12px",marginBottom:12}}>
+        <i className="icon ion-ios-search" style={{color:"#6B6B68",fontSize:15}}></i>
+        <span style={{color:"#9a9994",fontSize:13}}>Search</span>
+      </div>
+      <div style={{display:"flex",borderBottom:"1px solid var(--border-hairline)",marginBottom:14}}>
+        {["keeps","people"].map(t=>(<div key={t} onClick={()=>setTab(t)} style={{padding:"8px 16px",fontSize:13,fontWeight:600,textTransform:"capitalize",borderBottom:tab===t?"2px solid var(--accent)":"2px solid transparent",color:tab===t?"var(--accent)":"#6B6B68"}}>{t}</div>))}
+      </div>
+      {keeps.slice(0,3).map(k=>(<div key={k.id} style={{display:"flex",alignItems:"center",gap:10,padding:10,border:"1px solid var(--border-hairline)",borderRadius:6,marginBottom:8}}>
+        <div style={{width:36,height:36,background:"var(--surface-card)",borderRadius:4,flexShrink:0}} />
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:600}}>{k.title}</div>
+          <div style={{fontSize:11,color:"#6B6B68"}}>{k.isPrivate?"Private keep":"Public keep"}</div>
+        </div>
+      </div>))}
+    </div>
+  );
+}
+function B_CreateKeep() {
+  const [privacy,setPrivacy]=React.useState("private");
+  return (
+    <div className="screen" style={{padding:"16px 20px 24px"}}>
+      <div style={{fontSize:17,fontWeight:700,marginBottom:16}}>New keep</div>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}><span style={{fontSize:11,fontWeight:700,background:"var(--surface-card)",borderRadius:10,padding:"2px 8px"}}>1</span><span style={{fontSize:12,fontWeight:600,color:"#6B6B68"}}>TITLE</span></div>
+      <div style={{border:"1px solid var(--border-hairline)",borderRadius:6,padding:"10px 12px",color:"#9a9994",fontSize:13,marginBottom:16}}>Spring Break 2026</div>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}><span style={{fontSize:11,fontWeight:700,background:"var(--surface-card)",borderRadius:10,padding:"2px 8px"}}>2</span><span style={{fontSize:12,fontWeight:600,color:"#6B6B68"}}>COVER</span></div>
+      <div style={{marginBottom:16}}><CoverPhotoPicker /></div>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}><span style={{fontSize:11,fontWeight:700,background:"var(--surface-card)",borderRadius:10,padding:"2px 8px"}}>3</span><span style={{fontSize:12,fontWeight:600,color:"#6B6B68"}}>PRIVACY</span></div>
+      {[{k:"private",label:"Private",desc:"Only invited co-owners can see it"},{k:"public",label:"Public",desc:"Discoverable by anyone"}].map(o=>(
+        <div key={o.k} onClick={()=>setPrivacy(o.k)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",border:"1px solid var(--border-hairline)",borderRadius:6,marginBottom:8}}>
+          <div style={{width:16,height:16,borderRadius:"50%",border:`2px solid ${privacy===o.k?"var(--accent)":"var(--border-hairline)"}`,display:"flex",alignItems:"center",justifyContent:"center"}}>{privacy===o.k && <div style={{width:8,height:8,borderRadius:"50%",background:"var(--accent)"}} />}</div>
+          <div><div style={{fontSize:13,fontWeight:600}}>{o.label}</div><div style={{fontSize:11,color:"#6B6B68"}}>{o.desc}</div></div>
+        </div>
+      ))}
+      <div style={{marginTop:16}}><Button label="Create keep" style={{width:"100%",boxSizing:"border-box"}} /></div>
+    </div>
+  );
+}
+
+function Col({children}){ return <div className="phone">{children}</div>; }
+ReactDOM.createRoot(document.getElementById("root-a")).render(<Col><A_KeepDetail/><A_PhotoDetail/><A_Search/></Col>);
+ReactDOM.createRoot(document.getElementById("root-c1")).render(<Col><C1_CreateKeep/></Col>);
+ReactDOM.createRoot(document.getElementById("root-c2")).render(<Col><C2_CreateKeep/></Col>);
+ReactDOM.createRoot(document.getElementById("root-c3")).render(<Col><C3_CreateKeep/></Col>);
+</script>
+</body></html>
