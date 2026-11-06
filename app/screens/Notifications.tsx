@@ -7,6 +7,8 @@ import type { AppStackParamList } from "../navigation/AppNavigator";
 import { useAuth } from "../lib/AuthProvider";
 import { fetchNotificationsForProfile } from "../lib/queries";
 import { setLastSeenNotificationsAt } from "../lib/notificationSeen";
+import { getAvatarUrl } from "../lib/storage";
+import Avatar from "../components/Avatar";
 import { colors, spacing, radii, typography } from "../theme/tokens";
 import type { PostNotification } from "../lib/queries";
 
@@ -57,12 +59,15 @@ export default function Notifications({ navigation }: Props) {
             style={styles.row}
             onPress={() => navigation.navigate("PhotoDetail", { postId: item.postId })}
           >
-            <View style={styles.iconWrap}>
-              <Ionicons
-                name={item.type === "like" ? "heart" : "chatbubble"}
-                size={16}
-                color={item.type === "like" ? colors.danger : colors.textPrimary}
+            <View style={styles.avatarWrap}>
+              <Avatar
+                uri={item.actor.avatar_url ? getAvatarUrl(item.actor.avatar_url) : null}
+                displayName={item.actor.display_name}
+                size={40}
               />
+              <View style={[styles.badge, item.type === "like" ? styles.badgeLike : styles.badgeComment]}>
+                <Ionicons name={item.type === "like" ? "heart" : "chatbubble"} size={10} color={colors.textInverse} />
+              </View>
             </View>
             <View style={styles.textWrap}>
               <Text style={styles.body}>
@@ -102,17 +107,30 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingVertical: spacing.sm,
   },
-  iconWrap: {
-    width: 28,
-    height: 28,
+  avatarWrap: {
+    position: "relative",
+  },
+  badge: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: colors.background,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 2,
+  },
+  badgeLike: {
+    backgroundColor: colors.danger,
+  },
+  badgeComment: {
+    backgroundColor: colors.accent,
   },
   textWrap: {
     flex: 1,
+    paddingTop: 2,
   },
   body: {
     fontSize: typography.size.sm,

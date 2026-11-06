@@ -4,6 +4,7 @@ import {
   View,
   Text,
   Image as RNImage,
+  Animated,
   Pressable,
   ActivityIndicator,
   StyleSheet,
@@ -15,17 +16,16 @@ import {
   PanGestureHandler,
   PinchGestureHandler,
   State,
-  type PanGestureHandlerGestureEvent,
   type PanGestureHandlerStateChangeEvent,
-  type PinchGestureHandlerGestureEvent,
   type PinchGestureHandlerStateChangeEvent,
 } from "react-native-gesture-handler";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
-import { colors, spacing, radii, typography } from "../theme/tokens";
+import { colors, spacing, radii, typography, iconGlyphFix } from "../theme/tokens";
 
 const EDIT_SIZE = Math.min(Dimensions.get("window").width, Dimensions.get("window").height) - spacing.lg * 2;
 const MAX_SCALE = 4;
 const MAX_OUTPUT_SIZE = 1080;
+const SPRING = { friction: 7, tension: 80, useNativeDriver: true } as const;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -33,7 +33,8 @@ function clamp(value: number, min: number, max: number): number {
 
 // Given the current (post-rotation) logical width/height of the image at
 // `scale`, how far the image can pan before its edge would leave the square
-// frame — pan is clamped to this at every step so the frame never shows a gap.
+// frame — pan is clamped to this whenever a gesture settles so the frame
+// never shows a gap.
 function maxPanOffset(naturalSize: number, scale: number): number {
   const displayed = naturalSize * scale;
   return Math.max(0, (displayed - EDIT_SIZE) / 2);
@@ -44,6 +45,15 @@ function maxPanOffset(naturalSize: number, scale: number): number {
 // display transform, so every consumer (grid tiles, feed thumbnails, other
 // devices) just renders the resulting image like any other — no transform
 // metadata to thread through the schema or plumb into every renderer.
+//
+// Pinch/pan live entirely in Animated.Values driven by useNativeDriver, not
+// React state — an earlier version called setState on every gesture frame,
+// which re-rendered (and re-laid-out) the full-screen Image on every touch
+// move and was the source of the reported lag/jank. Bounds clamping only
+// runs once per gesture, at release (onHandlerStateChange), not per frame:
+// a brief overshoot while actively pinching/panning is normal, pleasant
+// mobile UX (same rubber-band feel as iOS Photos), and it means the only
+// per-gesture JS work is a handful of arithmetic ops, not a render.
 export default function PhotoEditor({
   visible,
   uri,
@@ -58,13 +68,30 @@ export default function PhotoEditor({
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [rotationSteps, setRotationSteps] = useState(0);
-  const [pinchScale, setPinchScale] = useState(1);
-  const [translateX, setTranslateX] = useState(0);
-  const [translateY, setTranslateY] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Each axis/factor is split into a committed "base" (set once, at rest,
+  // via setValue) and a live "gesture" value (driven every frame by
+  // Animated.event, native-side only) — translateX = panBaseX + panGestureX,
+  // scale = pinchBase * pinchGesture. Composing them this way means the
+  // continuous per-frame updates never touch the base values or React state.
+  const panBaseX = useRef(new Animated.Value(0)).current;
+  const panBaseY = useRef(new Animated.Value(0)).current;
+  const panGestureX = useRef(new Animated.Value(0)).current;
+  const panGestureY = useRef(new Animated.Value(0)).current;
+  const translateX = useRef(Animated.add(panBaseX, panGestureX)).current;
+  const translateY = useRef(Animated.add(panBaseY, panGestureY)).current;
+
+  const pinchBaseAnim = useRef(new Animated.Value(1)).current;
+  const pinchGestureAnim = useRef(new Animated.Value(1)).current;
+  const scale = useRef(Animated.multiply(pinchBaseAnim, pinchGestureAnim)).current;
+
+  // Plain-number mirrors of the committed base values — read synchronously
+  // by the bounds-clamping check and by handleSave's crop math, neither of
+  // which can read an Animated.Value directly.
+  const panOffset = useRef({ x: 0, y: 0 });
   const pinchBase = useRef(1);
-  const panBase = useRef({ x: 0, y: 0 });
+
   const panRef = useRef(null);
   const pinchRef = useRef(null);
 
@@ -73,81 +100,108 @@ export default function PhotoEditor({
     setNaturalSize(null);
     setLoadError(false);
     setRotationSteps(0);
-    setPinchScale(1);
-    setTranslateX(0);
-    setTranslateY(0);
+    panBaseX.setValue(0);
+    panBaseY.setValue(0);
+    panGestureX.setValue(0);
+    panGestureY.setValue(0);
+    pinchBaseAnim.setValue(1);
+    pinchGestureAnim.setValue(1);
+    panOffset.current = { x: 0, y: 0 };
     pinchBase.current = 1;
-    panBase.current = { x: 0, y: 0 };
     RNImage.getSize(
       uri,
       (width, height) => setNaturalSize({ width, height }),
       () => setLoadError(true)
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, uri]);
 
   const rotated = rotationSteps % 2 === 1;
   const logicalW = naturalSize ? (rotated ? naturalSize.height : naturalSize.width) : 0;
   const logicalH = naturalSize ? (rotated ? naturalSize.width : naturalSize.height) : 0;
+  // min(logicalW, logicalH) is the same value regardless of rotation (it
+  // just swaps which axis is which), so this — unlike preW/preH — never
+  // needs to change on rotate.
   const baseScale = naturalSize ? EDIT_SIZE / Math.min(logicalW, logicalH) : 1;
-  const displayScale = baseScale * pinchScale;
-  // Pre-rotation element size — the Image itself renders at its true aspect
-  // ratio and gets spun with a `rotate` transform, rather than being
-  // stretched into a swapped box.
-  const preW = naturalSize ? naturalSize.width * displayScale : 0;
-  const preH = naturalSize ? naturalSize.height * displayScale : 0;
+  // Pre-rotation element size — the Image renders at its true aspect ratio
+  // and gets spun with a `rotate` transform, rather than being stretched
+  // into a swapped box. Deliberately excludes pinch scale (unlike the old
+  // version) — that's applied as a `transform: scale` instead of by
+  // resizing the element, so this stays constant across a pinch gesture.
+  const preW = naturalSize ? naturalSize.width * baseScale : 0;
+  const preH = naturalSize ? naturalSize.height * baseScale : 0;
 
-  const onPinchGestureEvent = (event: PinchGestureHandlerGestureEvent) => {
-    if (!naturalSize) return;
-    const nextScale = clamp(pinchBase.current * event.nativeEvent.scale, 1, MAX_SCALE);
-    const nextDisplayScale = baseScale * nextScale;
-    const maxX = maxPanOffset(logicalW, nextDisplayScale);
-    const maxY = maxPanOffset(logicalH, nextDisplayScale);
-    setPinchScale(nextScale);
-    setTranslateX((x) => clamp(x, -maxX, maxX));
-    setTranslateY((y) => clamp(y, -maxY, maxY));
-  };
-
-  const onPinchHandlerStateChange = (event: PinchGestureHandlerStateChangeEvent) => {
-    if (event.nativeEvent.oldState === State.ACTIVE) {
-      pinchBase.current = clamp(pinchBase.current * event.nativeEvent.scale, 1, MAX_SCALE);
+  // Re-centers pan whenever the effective scale changes (pinch end, or
+  // rotate) — zooming back out can leave a previously-valid pan offset
+  // outside the new, smaller bounds.
+  const clampPanToBounds = (effectiveScale: number) => {
+    const displayScale = baseScale * effectiveScale;
+    const maxX = maxPanOffset(logicalW, displayScale);
+    const maxY = maxPanOffset(logicalH, displayScale);
+    const clampedX = clamp(panOffset.current.x, -maxX, maxX);
+    const clampedY = clamp(panOffset.current.y, -maxY, maxY);
+    if (clampedX !== panOffset.current.x) {
+      panOffset.current.x = clampedX;
+      Animated.spring(panBaseX, { ...SPRING, toValue: clampedX }).start();
+    }
+    if (clampedY !== panOffset.current.y) {
+      panOffset.current.y = clampedY;
+      Animated.spring(panBaseY, { ...SPRING, toValue: clampedY }).start();
     }
   };
 
-  const onPanGestureEvent = (event: PanGestureHandlerGestureEvent) => {
-    if (!naturalSize) return;
-    const maxX = maxPanOffset(logicalW, displayScale);
-    const maxY = maxPanOffset(logicalH, displayScale);
-    setTranslateX(clamp(panBase.current.x + event.nativeEvent.translationX, -maxX, maxX));
-    setTranslateY(clamp(panBase.current.y + event.nativeEvent.translationY, -maxY, maxY));
-  };
+  const onPanGestureEvent = Animated.event(
+    [{ nativeEvent: { translationX: panGestureX, translationY: panGestureY } }],
+    { useNativeDriver: true }
+  );
 
   const onPanHandlerStateChange = (event: PanGestureHandlerStateChangeEvent) => {
     if (event.nativeEvent.oldState === State.ACTIVE) {
-      const maxX = maxPanOffset(logicalW, displayScale);
-      const maxY = maxPanOffset(logicalH, displayScale);
-      panBase.current = {
-        x: clamp(panBase.current.x + event.nativeEvent.translationX, -maxX, maxX),
-        y: clamp(panBase.current.y + event.nativeEvent.translationY, -maxY, maxY),
-      };
+      const finalX = panOffset.current.x + event.nativeEvent.translationX;
+      const finalY = panOffset.current.y + event.nativeEvent.translationY;
+      panOffset.current = { x: finalX, y: finalY };
+      panBaseX.setValue(finalX);
+      panBaseY.setValue(finalY);
+      panGestureX.setValue(0);
+      panGestureY.setValue(0);
+      clampPanToBounds(pinchBase.current);
+    }
+  };
+
+  const onPinchGestureEvent = Animated.event([{ nativeEvent: { scale: pinchGestureAnim } }], {
+    useNativeDriver: true,
+  });
+
+  const onPinchHandlerStateChange = (event: PinchGestureHandlerStateChangeEvent) => {
+    if (event.nativeEvent.oldState === State.ACTIVE) {
+      const committed = clamp(pinchBase.current * event.nativeEvent.scale, 1, MAX_SCALE);
+      pinchBase.current = committed;
+      pinchBaseAnim.setValue(committed);
+      pinchGestureAnim.setValue(1);
+      clampPanToBounds(committed);
     }
   };
 
   const handleRotate = () => {
     setRotationSteps((s) => (s + 1) % 4);
-    setPinchScale(1);
-    setTranslateX(0);
-    setTranslateY(0);
+    panBaseX.setValue(0);
+    panBaseY.setValue(0);
+    panGestureX.setValue(0);
+    panGestureY.setValue(0);
+    pinchBaseAnim.setValue(1);
+    pinchGestureAnim.setValue(1);
+    panOffset.current = { x: 0, y: 0 };
     pinchBase.current = 1;
-    panBase.current = { x: 0, y: 0 };
   };
 
   const handleSave = async () => {
     if (!uri || !naturalSize) return;
     setIsSaving(true);
     try {
+      const displayScale = baseScale * pinchBase.current;
       const cropSize = clamp(EDIT_SIZE / displayScale, 1, Math.min(logicalW, logicalH));
-      const originX = clamp((logicalW - cropSize) / 2 - translateX / displayScale, 0, logicalW - cropSize);
-      const originY = clamp((logicalH - cropSize) / 2 - translateY / displayScale, 0, logicalH - cropSize);
+      const originX = clamp((logicalW - cropSize) / 2 - panOffset.current.x / displayScale, 0, logicalW - cropSize);
+      const originY = clamp((logicalH - cropSize) / 2 - panOffset.current.y / displayScale, 0, logicalH - cropSize);
 
       const actions = [];
       if (rotationSteps !== 0) actions.push({ rotate: rotationSteps * 90 });
@@ -209,18 +263,23 @@ export default function PhotoEditor({
                   maxPointers={2}
                 >
                   <View style={StyleSheet.absoluteFill}>
-                    <View
+                    <Animated.View
                       style={{
                         position: "absolute",
-                        left: EDIT_SIZE / 2 + translateX - preW / 2,
-                        top: EDIT_SIZE / 2 + translateY - preH / 2,
+                        left: (EDIT_SIZE - preW) / 2,
+                        top: (EDIT_SIZE - preH) / 2,
                         width: preW,
                         height: preH,
-                        transform: [{ rotate: `${rotationSteps * 90}deg` }],
+                        transform: [
+                          { translateX },
+                          { translateY },
+                          { rotate: `${rotationSteps * 90}deg` },
+                          { scale },
+                        ],
                       }}
                     >
                       <Image source={{ uri }} style={{ width: preW, height: preH }} contentFit="cover" />
-                    </View>
+                    </Animated.View>
                   </View>
                 </PanGestureHandler>
               </PinchGestureHandler>
@@ -231,7 +290,7 @@ export default function PhotoEditor({
         <View style={styles.footer}>
           <Text style={styles.hint}>Pinch to zoom, drag to reposition</Text>
           <Pressable style={styles.rotateButton} onPress={handleRotate} hitSlop={8}>
-            <Ionicons name="sync-outline" size={20} color={colors.textInverse} />
+            <Ionicons name="sync-outline" size={20} color={colors.textInverse} style={iconGlyphFix(20)} />
             <Text style={styles.rotateButtonText}>Rotate</Text>
           </Pressable>
         </View>
@@ -243,7 +302,7 @@ export default function PhotoEditor({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: colors.editorBackground,
   },
   toolbar: {
     flexDirection: "row",
@@ -273,10 +332,9 @@ const styles = StyleSheet.create({
   },
   frame: {
     overflow: "hidden",
-    backgroundColor: "#111",
+    backgroundColor: colors.editorFrame,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radii.xs,
   },
   errorText: {
     color: colors.textInverse,
@@ -289,7 +347,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontSize: typography.size.xs,
-    color: "rgba(255,255,255,0.6)",
+    color: colors.editorHint,
   },
   rotateButton: {
     flexDirection: "row",
@@ -298,7 +356,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: colors.editorControlBackground,
   },
   rotateButtonText: {
     fontSize: typography.size.sm,

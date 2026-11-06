@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParamList } from "../navigation/AppNavigator";
 import { searchKeeps, searchProfiles } from "../lib/queries";
+import { getAvatarUrl } from "../lib/storage";
+import Avatar from "../components/Avatar";
 import BottomNavBar from "../components/BottomNavBar";
 import { colors, spacing, radii, typography } from "../theme/tokens";
 import type { Keep, Profile } from "../types/database";
@@ -106,9 +108,11 @@ export default function Search({ navigation }: Props) {
                   <Text style={styles.rowTitle} numberOfLines={1}>
                     {keep.title}
                   </Text>
-                  {keep.privacy_mode === "private" && (
-                    <Ionicons name="lock-closed" size={14} color={colors.textSecondary} />
-                  )}
+                  <Ionicons
+                    name={keep.privacy_mode === "private" ? "lock-closed" : "globe-outline"}
+                    size={14}
+                    color={colors.textSecondary}
+                  />
                 </Pressable>
               );
             }
@@ -118,9 +122,16 @@ export default function Search({ navigation }: Props) {
                 style={styles.row}
                 onPress={() => navigation.navigate("PublicProfile", { profileId: profile.id })}
               >
-                <View>
-                  <Text style={styles.rowTitle}>{profile.display_name}</Text>
-                  <Text style={styles.rowSubtitle}>@{profile.handle}</Text>
+                <View style={styles.profileRow}>
+                  <Avatar
+                    uri={profile.avatar_url ? getAvatarUrl(profile.avatar_url) : null}
+                    displayName={profile.display_name}
+                    size={32}
+                  />
+                  <View>
+                    <Text style={styles.rowTitle}>{profile.display_name}</Text>
+                    <Text style={styles.rowSubtitle}>@{profile.handle}</Text>
+                  </View>
                 </View>
               </Pressable>
             );
@@ -177,6 +188,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  profileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   rowTitle: {
     fontSize: typography.size.md,

@@ -1,16 +1,17 @@
-import { useEffect, useState } from "react";
-import { View, Text, TextInput, Switch, StyleSheet, ActivityIndicator } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { View, Text, TextInput, Pressable, Switch, Alert, StyleSheet, ActivityIndicator } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParamList } from "../navigation/AppNavigator";
 import { useAuth } from "../lib/AuthProvider";
-import { fetchKeepById, fetchKeepMembership, updateKeep, updateKeepCoverPhoto } from "../lib/queries";
+import { fetchKeepById, fetchKeepMembership, updateKeep, updateKeepCoverPhoto, deleteKeep } from "../lib/queries";
 import { uploadKeepCoverPhoto, getSignedMediaUrl } from "../lib/storage";
 import { computeBlurhash } from "../lib/blurhash";
 import { SIGNED_URL_QUERY_OPTIONS, signedMediaUrlKey } from "../lib/signedUrlCache";
 import { getErrorMessage } from "../lib/errors";
-import Button from "../components/Button";
+import { PRIVACY_OPTIONS } from "../lib/keepPrivacyOptions";
 import CoverPhotoPicker from "../components/CoverPhotoPicker";
 import KeyboardAvoidingScreen from "../components/KeyboardAvoidingScreen";
 import { colors, spacing, radii, typography } from "../theme/tokens";
@@ -39,6 +40,7 @@ export default function EditKeep({ route, navigation }: Props) {
   const [isHiddenFromProfile, setIsHiddenFromProfile] = useState(false);
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
@@ -102,6 +104,68 @@ export default function EditKeep({ route, navigation }: Props) {
     }
   };
 
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete keep?",
+      "This permanently deletes the keep and everything in it — photos, posts, comments. This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!session) return;
+            setIsDeleting(true);
+            try {
+              await deleteKeep(keepId);
+              await queryClient.invalidateQueries({ queryKey: ["keeps", session.user.id] });
+              await queryClient.invalidateQueries({ queryKey: ["profileKeeps", session.user.id] });
+              navigation.pop(2);
+            } catch (e) {
+              setError(getErrorMessage(e));
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // handleSubmit closes over title/privacyMode/coverUri/etc., so it's a
+  // fresh function every render — putting it directly in the effect below's
+  // deps re-runs navigation.setOptions, and hands native-stack a brand new
+  // headerLeft/headerRight, on every render (including ones that have
+  // nothing to do with the header, e.g. picking a cover photo). Rebuilding
+  // the native header that rapidly is known to corrupt the header bar and
+  // swipe-back gesture (see EditPost.tsx's identical fix). Routing the tap
+  // through a ref keeps handleSubmit itself out of the deps array — Save
+  // still always calls the latest version — while `title` stays a direct
+  // dep since the header's disabled styling needs to react to it.
+  const handleSubmitRef = useRef(handleSubmit);
+  handleSubmitRef.current = handleSubmit;
+
+  useEffect(() => {
+    const canSave = !!title.trim();
+    navigation.setOptions({
+      headerTitleStyle: { fontFamily: typography.family.serif, fontSize: typography.size.lg, color: colors.textPrimary },
+      headerLeft: () => (
+        <Pressable onPress={() => navigation.goBack()} disabled={isSaving || isDeleting} hitSlop={8}>
+          <Text style={styles.headerCancel}>Cancel</Text>
+        </Pressable>
+      ),
+      headerRight: () => (
+        <Pressable onPress={() => handleSubmitRef.current()} disabled={isSaving || isDeleting || !canSave} hitSlop={8}>
+          {isSaving ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Text style={[styles.headerSave, (isDeleting || !canSave) && styles.headerSaveDisabled]}>Save</Text>
+          )}
+        </Pressable>
+      ),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, isSaving, isDeleting, title]);
+
   if (isLoading || isMembershipLoading || !keep || !membership) {
     return (
       <View style={styles.loading}>
@@ -115,41 +179,45 @@ export default function EditKeep({ route, navigation }: Props) {
 
   return (
     <KeyboardAvoidingScreen contentContainerStyle={styles.content}>
-      <Text style={styles.label}>Title</Text>
+      <CoverPhotoPicker uri={coverPreview} cacheKey={coverPreviewCacheKey} onPress={pickCoverPhoto} />
+
       <TextInput
-        style={styles.input}
+        style={styles.titleInput}
         value={title}
         onChangeText={setTitle}
-        placeholder="Spring Break 2026"
+        placeholder="Untitled keep"
         placeholderTextColor={colors.textSecondary}
         returnKeyType="done"
         onSubmitEditing={handleSubmit}
       />
 
-      <Text style={styles.label}>Cover photo</Text>
-      <CoverPhotoPicker uri={coverPreview} cacheKey={coverPreviewCacheKey} onPress={pickCoverPhoto} />
+      <View style={styles.divider} />
 
-      <View style={styles.switchRow}>
-        <View>
-          <Text style={styles.label}>{privacyMode === "public" ? "Public" : "Private"}</Text>
-          <Text style={styles.switchRowHint}>
-            {privacyMode === "public" ? "Anyone can find and follow this keep" : "Only members can access this keep"}
-          </Text>
-        </View>
-        <Switch
-          value={privacyMode === "public"}
-          onValueChange={(value) => setPrivacyMode(value ? "public" : "private")}
-          trackColor={{ false: colors.border, true: colors.textPrimary }}
-          thumbColor={colors.background}
-          ios_backgroundColor={colors.border}
-        />
+      <Text style={styles.eyebrow}>Privacy</Text>
+      <View style={styles.privacyRow}>
+        {PRIVACY_OPTIONS.map((option) => {
+          const isActive = option.value === privacyMode;
+          return (
+            <Pressable
+              key={option.value}
+              style={[styles.privacyCard, isActive && styles.privacyCardActive]}
+              onPress={() => setPrivacyMode(option.value)}
+            >
+              <Ionicons name={option.icon} size={20} color={isActive ? colors.accent : colors.textPrimary} />
+              <Text style={[styles.privacyLabel, isActive && styles.privacyLabelActive]}>{option.label}</Text>
+              <Text style={styles.privacyDescription}>{option.description}</Text>
+            </Pressable>
+          );
+        })}
       </View>
+
+      <View style={styles.divider} />
 
       <View style={styles.switchRow}>
         <View>
           <Text style={styles.label}>Show on profile</Text>
           <Text style={styles.switchRowHint}>
-            {isHiddenFromProfile ? "Hidden from your profile grid" : "Visible on your profile grid"}
+            {isHiddenFromProfile ? "Hidden from your profile grid" : "Appears in your keeps grid"}
           </Text>
         </View>
         <Switch
@@ -163,7 +231,25 @@ export default function EditKeep({ route, navigation }: Props) {
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <Button label="Save changes" onPress={handleSubmit} disabled={!title.trim()} loading={isSaving} />
+      <View style={styles.divider} />
+
+      <Pressable
+        style={styles.listRow}
+        onPress={() => navigation.navigate("ManageCoOwners", { keepId })}
+        disabled={isSaving || isDeleting}
+      >
+        <Text style={styles.listRowText}>Manage collaborators</Text>
+        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+      </Pressable>
+
+      <Pressable style={styles.listRow} onPress={handleDelete} disabled={isSaving || isDeleting}>
+        <Text style={[styles.listRowText, styles.deleteText]}>Delete keep</Text>
+        {isDeleting ? (
+          <ActivityIndicator size="small" color={colors.danger} />
+        ) : (
+          <Ionicons name="trash-outline" size={18} color={colors.danger} />
+        )}
+      </Pressable>
     </KeyboardAvoidingScreen>
   );
 }
@@ -178,27 +264,77 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.background,
   },
+  headerCancel: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+  },
+  headerSave: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.accent,
+  },
+  headerSaveDisabled: {
+    opacity: 0.4,
+  },
+  titleInput: {
+    fontFamily: typography.family.serif,
+    fontSize: typography.size.xl,
+    color: colors.textPrimary,
+    marginTop: spacing.sm,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.md,
+  },
+  eyebrow: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: typography.letterSpacing.wide,
+    marginBottom: spacing.sm,
+  },
   label: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.medium,
     color: colors.textPrimary,
     marginBottom: spacing.xs,
   },
-  input: {
+  privacyRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  privacyCard: {
+    flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.xs,
+    borderRadius: radii.md,
     padding: spacing.md,
-    fontSize: typography.size.md,
+  },
+  privacyCardActive: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentMuted,
+  },
+  privacyLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
     color: colors.textPrimary,
-    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: 2,
+  },
+  privacyLabelActive: {
+    color: colors.accent,
+  },
+  privacyDescription: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
   },
   switchRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
-    marginBottom: spacing.lg,
   },
   switchRowHint: {
     color: colors.textSecondary,
@@ -208,6 +344,20 @@ const styles = StyleSheet.create({
   },
   error: {
     color: colors.danger,
-    marginBottom: spacing.md,
+    marginTop: spacing.md,
+  },
+  listRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.sm,
+  },
+  listRowText: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.medium,
+    color: colors.textPrimary,
+  },
+  deleteText: {
+    color: colors.danger,
   },
 });

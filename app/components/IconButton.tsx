@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../theme/tokens";
+import { colors, iconGlyphFix } from "../theme/tokens";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -45,19 +45,7 @@ export default function IconButton({
         name={name}
         size={iconSize}
         color={color ?? (isSolid ? colors.textInverse : colors.textPrimary)}
-        // The glyph's natural text box (driven by the font's advance width/
-        // ascent) doesn't reliably match its visual ink — flexbox centers
-        // that box, not the glyph, so a wide or lopsided advance still reads
-        // as off-center. Forcing an exact square box here, with the glyph
-        // centered inside it, removes that mismatch instead of just nudging it.
-        style={{
-          width: iconSize,
-          height: iconSize,
-          lineHeight: iconSize,
-          textAlign: "center",
-          textAlignVertical: "center",
-          includeFontPadding: false,
-        }}
+        style={iconGlyphFix(iconSize)}
       />
     </Pressable>
   );

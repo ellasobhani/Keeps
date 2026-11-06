@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, FlatList, ActivityIndicator, Pressable, RefreshControl, StyleSheet } from "react-native";
+import { View, Text, FlatList, ActivityIndicator, Pressable, RefreshControl, Alert, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,17 +11,54 @@ import {
   fetchKeepMembership,
   fetchKeepFollowStatus,
   fetchPendingCoOwnerInvites,
+  fetchKeepCoOwners,
   followKeep,
   unfollowKeep,
   reconcilePostMediaLocation,
 } from "../lib/queries";
 import { fetchPostsForKeepPrewarmed, postsForKeepKey } from "../lib/signedUrlCache";
 import { getErrorMessage } from "../lib/errors";
+import { getAvatarUrl } from "../lib/storage";
 import PostGridTile from "../components/PostGridTile";
 import IconButton from "../components/IconButton";
 import Button from "../components/Button";
+import Avatar from "../components/Avatar";
 import { colors, spacing, radii, typography } from "../theme/tokens";
-import type { PostWithMedia } from "../types/database";
+import type { PostWithMedia, KeepMemberWithProfile } from "../types/database";
+
+const AVATAR_STACK_MAX = 4;
+const AVATAR_STACK_SIZE = 22;
+
+// Overlapping co-owner avatars — tappable (opens ManageCoOwners) only for
+// co-owners themselves; a follower/outsider viewing a public keep can see
+// who's in it (keep_members select RLS allows this) but has no reason to
+// reach the invite/remove screen, so it renders as plain info for them.
+function AvatarStack({
+  coOwners,
+  onPress,
+}: {
+  coOwners: KeepMemberWithProfile[];
+  onPress?: () => void;
+}) {
+  const shown = coOwners.slice(0, AVATAR_STACK_MAX);
+  const content = (
+    <View style={styles.avatarStack}>
+      {shown.map((member, index) => (
+        <View
+          key={member.profile_id}
+          style={[styles.avatarStackItem, index > 0 && { marginLeft: -8 }]}
+        >
+          <Avatar
+            uri={member.profiles.avatar_url ? getAvatarUrl(member.profiles.avatar_url) : null}
+            displayName={member.profiles.display_name}
+            size={AVATAR_STACK_SIZE}
+          />
+        </View>
+      ))}
+    </View>
+  );
+  return onPress ? <Pressable onPress={onPress}>{content}</Pressable> : content;
+}
 
 type Props = NativeStackScreenProps<AppStackParamList, "KeepDetail">;
 
@@ -88,6 +125,14 @@ export default function KeepDetail({ route, navigation }: Props) {
     queryFn: () => fetchKeepFollowStatus(keepId, session!.user.id),
   });
 
+  // Shared query key with ManageCoOwners.tsx — same underlying list, so a
+  // change made there (invite accepted, co-owner removed) is already
+  // invalidated under this key and this stack picks it up for free.
+  const { data: coOwners = [], refetch: refetchCoOwners } = useQuery({
+    queryKey: ["keepCoOwners", keepId],
+    queryFn: () => fetchKeepCoOwners(keepId),
+  });
+
   // Badge on the collaborators icon below — invites you've sent that
   // haven't been accepted yet. Incoming follow requests moved to the
   // Invites tab (Milestone 9 of collaborative_keeps_plan.md), so this icon
@@ -105,12 +150,13 @@ export default function KeepDetail({ route, navigation }: Props) {
       await Promise.all([
         refetchKeep(),
         refetchPosts(),
+        refetchCoOwners(),
         isCoOwner ? refetchPendingCoOwnerInvites() : Promise.resolve(),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [refetchKeep, refetchPosts, refetchPendingCoOwnerInvites, isCoOwner]);
+  }, [refetchKeep, refetchPosts, refetchCoOwners, refetchPendingCoOwnerInvites, isCoOwner]);
 
   const handleFollowPress = async () => {
     if (!session || !keep) return;
@@ -122,12 +168,18 @@ export default function KeepDetail({ route, navigation }: Props) {
     await queryClient.invalidateQueries({ queryKey: ["keepFollowStatus", keepId, session.user.id] });
   };
 
+  const showKeepActions = () => {
+    Alert.alert("", "", [
+      { text: "Edit", onPress: () => navigation.navigate("EditKeep", { keepId }) },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
   useEffect(() => {
     navigation.setOptions({
-      headerRight: isCoOwner
-        ? () => <IconButton name="create-outline" onPress={() => navigation.navigate("EditKeep", { keepId })} />
-        : undefined,
+      headerRight: isCoOwner ? () => <IconButton name="ellipsis-horizontal" onPress={showKeepActions} /> : undefined,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation, keepId, isCoOwner]);
 
   return (
@@ -148,21 +200,26 @@ export default function KeepDetail({ route, navigation }: Props) {
               {keep?.privacy_mode === "private" && (
                 <Ionicons name="lock-closed" size={16} color={colors.textPrimary} style={styles.lockIcon} />
               )}
-              {isCoOwner && (
-                <Pressable
-                  style={styles.requestsButton}
-                  onPress={() => navigation.navigate("ManageCoOwners", { keepId })}
-                  hitSlop={8}
-                >
-                  <Ionicons name="people-outline" size={16} color={colors.textPrimary} />
-                  {pendingCoOwnerInvites.length > 0 && (
+            </View>
+
+            {coOwners.length > 0 && (
+              <View style={styles.sharedRow}>
+                <Text style={styles.sharedText}>
+                  {posts.length} {posts.length === 1 ? "memory" : "memories"} · shared with
+                </Text>
+                <View style={styles.avatarStackWrap}>
+                  <AvatarStack
+                    coOwners={coOwners}
+                    onPress={isCoOwner ? () => navigation.navigate("ManageCoOwners", { keepId }) : undefined}
+                  />
+                  {isCoOwner && pendingCoOwnerInvites.length > 0 && (
                     <View style={styles.requestsBadge}>
                       <Text style={styles.requestsBadgeText}>{pendingCoOwnerInvites.length}</Text>
                     </View>
                   )}
-                </Pressable>
-              )}
-            </View>
+                </View>
+              </View>
+            )}
 
             {!isCoOwner && followStatus !== undefined && (
               <Button
@@ -236,23 +293,34 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
+    fontFamily: typography.family.serif,
     fontSize: typography.size.xl,
-    fontWeight: typography.weight.bold,
     color: colors.textPrimary,
   },
   lockIcon: {
     marginLeft: spacing.xs,
   },
-  requestsButton: {
-    marginLeft: spacing.sm,
-    width: 32,
-    height: 32,
-    borderRadius: radii.xs,
-    borderWidth: 1,
-    borderColor: colors.textPrimary,
-    backgroundColor: colors.surface,
+  sharedRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    marginTop: spacing.xs,
+  },
+  sharedText: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginRight: spacing.xs,
+  },
+  avatarStackWrap: {
+    position: "relative",
+  },
+  avatarStack: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  avatarStackItem: {
+    borderWidth: 2,
+    borderColor: colors.background,
+    borderRadius: radii.pill,
   },
   requestsBadge: {
     position: "absolute",
@@ -261,13 +329,13 @@ const styles = StyleSheet.create({
     minWidth: 16,
     height: 16,
     borderRadius: radii.pill,
-    paddingHorizontal: 3,
+    paddingHorizontal: spacing.xs,
     backgroundColor: colors.danger,
     alignItems: "center",
     justifyContent: "center",
   },
   requestsBadgeText: {
-    fontSize: 10,
+    fontSize: typography.size.xs,
     fontWeight: typography.weight.bold,
     color: colors.textInverse,
   },

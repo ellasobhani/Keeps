@@ -36,7 +36,7 @@ export interface KeepMember {
 }
 
 export interface KeepMemberWithProfile extends KeepMember {
-  profiles: Pick<Profile, "id" | "display_name" | "handle">;
+  profiles: Pick<Profile, "id" | "display_name" | "handle" | "avatar_url">;
 }
 
 export type KeepFollowStatus = "pending" | "approved";

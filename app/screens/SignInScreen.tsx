@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   buttonText: {
     color: colors.textInverse,

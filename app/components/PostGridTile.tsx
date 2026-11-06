@@ -107,10 +107,10 @@ const styles = StyleSheet.create({
     top: spacing.xs,
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: colors.scrim,
   },
   badgeRight: {
     right: spacing.xs,

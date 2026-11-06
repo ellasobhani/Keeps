@@ -13,6 +13,7 @@ import type {
   LikeWithProfile,
   MediaType,
   Post,
+  PostMedia,
   PostWithMedia,
   PostWithMediaAndAuthor,
   PrivacyMode,
@@ -57,19 +58,6 @@ export async function updateProfile(
 export async function deleteOwnAccount(profileId: string): Promise<void> {
   const { error } = await supabase.from("profiles").delete().eq("id", profileId);
   if (error) throw error;
-}
-
-// Exact handle lookup, used to invite a co-owner by @handle — there's no
-// fuzzy/autocomplete search anywhere else in the app yet, so this stays
-// minimal on purpose.
-export async function fetchProfileByHandle(handle: string): Promise<Profile | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .ilike("handle", handle.trim())
-    .maybeSingle();
-  if (error) throw error;
-  return data as Profile | null;
 }
 
 // Both rely entirely on RLS for privacy: keeps' own select policy already
@@ -164,7 +152,7 @@ export async function unfollowProfile(profileId: string, followerId: string): Pr
 export interface ProfileFollowerEvent {
   follower_id: string;
   created_at: string;
-  profiles: Pick<Profile, "id" | "display_name" | "handle">;
+  profiles: Pick<Profile, "id" | "display_name" | "handle" | "avatar_url">;
 }
 
 // Informational only — profile-following stays instant/open (no request
@@ -174,7 +162,7 @@ export interface ProfileFollowerEvent {
 export async function fetchRecentProfileFollowers(profileId: string): Promise<ProfileFollowerEvent[]> {
   const { data, error } = await supabase
     .from("profile_followers")
-    .select("follower_id, created_at, profiles!profile_followers_follower_id_fkey(id, display_name, handle)")
+    .select("follower_id, created_at, profiles!profile_followers_follower_id_fkey(id, display_name, handle, avatar_url)")
     .eq("profile_id", profileId)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -261,6 +249,7 @@ export async function createKeep(input: {
   ownerId: string;
   title: string;
   privacyMode: PrivacyMode;
+  hiddenFromProfile?: boolean;
 }): Promise<Keep> {
   const { data: keep, error: keepError } = await supabase
     .from("keeps")
@@ -269,9 +258,13 @@ export async function createKeep(input: {
     .single();
   if (keepError) throw keepError;
 
-  const { error: memberError } = await supabase
-    .from("keep_members")
-    .insert({ keep_id: keep.id, profile_id: input.ownerId, role: "owner", status: "approved" });
+  const { error: memberError } = await supabase.from("keep_members").insert({
+    keep_id: keep.id,
+    profile_id: input.ownerId,
+    role: "owner",
+    status: "approved",
+    hidden_from_profile: input.hiddenFromProfile ?? false,
+  });
   if (memberError) throw memberError;
 
   return keep as Keep;
@@ -296,6 +289,15 @@ export async function updateKeep(
     .eq("keep_id", keepId)
     .eq("profile_id", profileId);
   if (memberError) throw memberError;
+}
+
+// Only the owner can do this — see "keeps delete - owner" RLS policy.
+// keep_members/posts (and everything cascading from posts: post_media,
+// likes, comments, favorites) all reference keeps(id) on delete cascade,
+// so this one call is enough to unwind the whole keep.
+export async function deleteKeep(keepId: string): Promise<void> {
+  const { error } = await supabase.from("keeps").delete().eq("id", keepId);
+  if (error) throw error;
 }
 
 export async function updateKeepCoverPhoto(
@@ -334,7 +336,7 @@ export async function fetchKeepMembership(
 export async function fetchKeepCoOwners(keepId: string): Promise<KeepMemberWithProfile[]> {
   const { data, error } = await supabase
     .from("keep_members")
-    .select("*, profiles(id, display_name, handle)")
+    .select("*, profiles(id, display_name, handle, avatar_url)")
     .eq("keep_id", keepId)
     .eq("status", "approved");
   if (error) throw error;
@@ -520,14 +522,23 @@ interface FeedKeepIdRow {
   keep_id: string;
 }
 
-// Feed scope: keeps the caller is an approved co-owner of, or an approved
-// follower of (pending follows/invites don't count) — deliberately narrower
-// than profile_followers, per the Feed tab's spec. show_in_feed lets a
-// poster opt a post out (0014_post_feed_visibility.sql) without hiding it
-// from the keep page itself, and author_id is excluded since you already
-// saw your own post the moment you made it. `since` is a device-local "last
-// seen" cursor (see lib/feedSeen.ts) — omit it for a first-ever fetch.
-export async function fetchFeed(profileId: string, since: string | null): Promise<FeedPost[]> {
+// "mine" is keeps the caller co-owns; "all" adds in approved-follow keeps
+// on top of that — the toggle above the Feed list.
+export type FeedScope = "mine" | "all";
+
+// Feed scope: keeps the caller is an approved co-owner of, or (when scope is
+// "all") an approved follower of too — pending follows/invites don't count,
+// deliberately narrower than profile_followers, per the Feed tab's spec.
+// show_in_feed lets a poster opt a post out (0014_post_feed_visibility.sql)
+// without hiding it from the keep page itself, and author_id is excluded
+// since you already saw your own post the moment you made it. `since` is a
+// device-local "last seen" cursor (see lib/feedSeen.ts) — omit it for a
+// first-ever fetch.
+export async function fetchFeed(
+  profileId: string,
+  since: string | null,
+  scope: FeedScope = "all"
+): Promise<FeedPost[]> {
   const [membershipsRes, followsRes] = await Promise.all([
     supabase.from("keep_members").select("keep_id").eq("profile_id", profileId).eq("status", "approved"),
     supabase.from("keep_followers").select("keep_id").eq("profile_id", profileId).eq("status", "approved"),
@@ -535,12 +546,11 @@ export async function fetchFeed(profileId: string, since: string | null): Promis
   if (membershipsRes.error) throw membershipsRes.error;
   if (followsRes.error) throw followsRes.error;
 
-  const keepIds = Array.from(
-    new Set([
-      ...(membershipsRes.data as FeedKeepIdRow[]).map((row) => row.keep_id),
-      ...(followsRes.data as FeedKeepIdRow[]).map((row) => row.keep_id),
-    ])
-  );
+  const membershipIds = (membershipsRes.data as FeedKeepIdRow[]).map((row) => row.keep_id);
+  const keepIds =
+    scope === "mine"
+      ? membershipIds
+      : Array.from(new Set([...membershipIds, ...(followsRes.data as FeedKeepIdRow[]).map((row) => row.keep_id)]));
   if (keepIds.length === 0) return [];
 
   let query = supabase
@@ -692,11 +702,14 @@ export async function addPostMedia(
   position: number,
   mediaType: MediaType,
   blurhash: string | null
-): Promise<void> {
-  const { error } = await supabase
+): Promise<PostMedia> {
+  const { data, error } = await supabase
     .from("post_media")
-    .insert({ post_id: postId, media_url: mediaUrl, position, media_type: mediaType, blurhash });
+    .insert({ post_id: postId, media_url: mediaUrl, position, media_type: mediaType, blurhash })
+    .select()
+    .single();
   if (error) throw error;
+  return data as PostMedia;
 }
 
 // Persists a new drag-reordered sequence for a post's media — position is
@@ -792,14 +805,14 @@ export type PostNotification =
       type: "like";
       createdAt: string;
       postId: string;
-      actor: Pick<Profile, "id" | "display_name" | "handle">;
+      actor: Pick<Profile, "id" | "display_name" | "handle" | "avatar_url">;
     }
   | {
       id: string;
       type: "comment";
       createdAt: string;
       postId: string;
-      actor: Pick<Profile, "id" | "display_name" | "handle">;
+      actor: Pick<Profile, "id" | "display_name" | "handle" | "avatar_url">;
       commentBody: string;
     };
 
@@ -807,7 +820,7 @@ interface LikeNotificationRow {
   post_id: string;
   profile_id: string;
   created_at: string;
-  profiles: Pick<Profile, "id" | "display_name" | "handle">;
+  profiles: Pick<Profile, "id" | "display_name" | "handle" | "avatar_url">;
 }
 
 interface CommentNotificationRow {
@@ -816,7 +829,7 @@ interface CommentNotificationRow {
   author_id: string;
   body: string;
   created_at: string;
-  profiles: Pick<Profile, "id" | "display_name" | "handle">;
+  profiles: Pick<Profile, "id" | "display_name" | "handle" | "avatar_url">;
 }
 
 // Likes/comments on posts I authored, newest first — the `posts!inner(...)`
@@ -826,11 +839,13 @@ export async function fetchNotificationsForProfile(profileId: string): Promise<P
   const [likesRes, commentsRes] = await Promise.all([
     supabase
       .from("likes")
-      .select("post_id, profile_id, created_at, profiles(id, display_name, handle), posts!inner(author_id)")
+      .select("post_id, profile_id, created_at, profiles(id, display_name, handle, avatar_url), posts!inner(author_id)")
       .eq("posts.author_id", profileId),
     supabase
       .from("comments")
-      .select("id, post_id, author_id, body, created_at, profiles(id, display_name, handle), posts!inner(author_id)")
+      .select(
+        "id, post_id, author_id, body, created_at, profiles(id, display_name, handle, avatar_url), posts!inner(author_id)"
+      )
       .eq("posts.author_id", profileId),
   ]);
   if (likesRes.error) throw likesRes.error;

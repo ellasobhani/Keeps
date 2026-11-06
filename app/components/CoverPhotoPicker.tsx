@@ -1,7 +1,7 @@
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, radii, typography } from "../theme/tokens";
+import { colors, spacing, radii, typography, iconGlyphFix } from "../theme/tokens";
 
 // Square cover-photo tile shared by CreateKeep and EditKeep. Styled after
 // AddPost's photo-picking UX (images-outline empty state, dashed add-tile
@@ -29,7 +29,8 @@ export default function CoverPhotoPicker({
             cachePolicy="memory-disk"
           />
           <View style={styles.editBadge}>
-            <Ionicons name="camera" size={13} color={colors.textInverse} />
+            <Ionicons name="camera" size={13} color={colors.textInverse} style={iconGlyphFix(13)} />
+            <Text style={styles.editBadgeText}>Change cover</Text>
           </View>
         </>
       ) : (
@@ -45,7 +46,7 @@ export default function CoverPhotoPicker({
 const styles = StyleSheet.create({
   picker: {
     aspectRatio: 1,
-    borderRadius: radii.none,
+    borderRadius: radii.md,
     backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
@@ -74,11 +75,17 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: spacing.sm,
     right: spacing.sm,
-    width: 24,
-    height: 24,
-    borderRadius: radii.pill,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: colors.scrim,
+  },
+  editBadgeText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.textInverse,
   },
 });

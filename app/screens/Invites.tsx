@@ -11,6 +11,8 @@ import {
   fetchRecentProfileFollowers,
   fetchPendingFollowRequestsForOwnKeeps,
 } from "../lib/queries";
+import { getAvatarUrl } from "../lib/storage";
+import Avatar from "../components/Avatar";
 import Button from "../components/Button";
 import { colors, spacing, typography } from "../theme/tokens";
 import type { PendingInviteWithKeep, ProfileFollowerEvent, KeepFollowRequestSummary } from "../lib/queries";
@@ -132,6 +134,27 @@ export default function Invites({ navigation }: Props) {
             return <Text style={styles.sectionLabel}>Follow requests on your keeps</Text>;
           if (item.type === "followerHeader") return <Text style={styles.sectionLabel}>New followers</Text>;
 
+          if (item.type === "follower") {
+            return (
+              <Pressable
+                style={[styles.row, styles.identityRow]}
+                onPress={() => navigation.navigate("PublicProfile", { profileId: item.event.follower_id })}
+              >
+                <Avatar
+                  uri={item.event.profiles.avatar_url ? getAvatarUrl(item.event.profiles.avatar_url) : null}
+                  displayName={item.event.profiles.display_name}
+                  size={40}
+                />
+                <View style={styles.followerText}>
+                  <Text style={styles.title}>{item.event.profiles.display_name} started following you</Text>
+                  <Text style={styles.hint}>
+                    @{item.event.profiles.handle} · {timeAgo(item.event.created_at)}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          }
+
           if (item.type === "coOwnerInvite") {
             const isProcessing = processingKeepId === item.invite.keep_id;
             return (
@@ -176,19 +199,7 @@ export default function Invites({ navigation }: Props) {
             );
           }
 
-          return (
-            <Pressable
-              style={styles.row}
-              onPress={() => navigation.navigate("PublicProfile", { profileId: item.event.follower_id })}
-            >
-              <View style={styles.identity}>
-                <Text style={styles.title}>{item.event.profiles.display_name} started following you</Text>
-                <Text style={styles.hint}>
-                  @{item.event.profiles.handle} · {timeAgo(item.event.created_at)}
-                </Text>
-              </View>
-            </Pressable>
-          );
+          return null;
         }}
       />
       {isLoading && <ActivityIndicator style={styles.loader} color={colors.accent} />}
@@ -213,11 +224,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   sectionLabel: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
     color: colors.textSecondary,
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
+    textTransform: "uppercase",
+    letterSpacing: typography.letterSpacing.wide,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   row: {
     paddingVertical: spacing.md,
@@ -226,6 +239,14 @@ const styles = StyleSheet.create({
   },
   identity: {
     marginBottom: spacing.sm,
+  },
+  identityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  followerText: {
+    flex: 1,
   },
   title: {
     fontSize: typography.size.md,

@@ -5,6 +5,7 @@ import {
   ScrollView,
   Pressable,
   Linking,
+  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -30,7 +31,7 @@ import CommentThread from "../components/CommentThread";
 import CommentComposer from "../components/CommentComposer";
 import IconButton from "../components/IconButton";
 import CarouselChevron from "../components/CarouselChevron";
-import { colors, spacing, radii, typography } from "../theme/tokens";
+import { colors, spacing, radii, typography, iconGlyphFix } from "../theme/tokens";
 import type { MediaType } from "../types/database";
 
 type Props = NativeStackScreenProps<AppStackParamList, "PhotoDetail">;
@@ -62,7 +63,7 @@ function VideoCarouselItem({ url, isActive }: { url: string; isActive: boolean }
     <Pressable style={styles.image} onPress={toggleMute}>
       <VideoView player={player} style={styles.image} nativeControls={false} contentFit="cover" pointerEvents="none" />
       <View style={styles.muteBadge}>
-        <Ionicons name={isMuted ? "volume-mute" : "volume-high"} size={16} color={colors.textInverse} />
+        <Ionicons name={isMuted ? "volume-mute" : "volume-high"} size={16} color={colors.textInverse} style={iconGlyphFix(16)} />
       </View>
     </Pressable>
   );
@@ -160,12 +161,18 @@ export default function PhotoDetail({ route, navigation }: Props) {
     setActiveIndex((prev) => (prev === index ? prev : index));
   };
 
+  const showActions = () => {
+    Alert.alert("", "", [
+      { text: "Edit", onPress: () => navigation.navigate("EditPost", { postId }) },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
   useEffect(() => {
     navigation.setOptions({
-      headerRight: isAuthor
-        ? () => <IconButton name="create-outline" onPress={() => navigation.navigate("EditPost", { postId })} />
-        : undefined,
+      headerRight: isAuthor ? () => <IconButton name="ellipsis-horizontal" onPress={showActions} /> : undefined,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation, isAuthor, postId]);
 
   if (isLoading || !post || !session) {
@@ -297,7 +304,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: radii.pill,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: colors.scrim,
     alignItems: "center",
     justifyContent: "center",
   },

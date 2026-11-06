@@ -2,7 +2,7 @@ import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useAuth } from "../lib/AuthProvider";
-import { colors } from "../theme/tokens";
+import { colors, radii } from "../theme/tokens";
 import SignInScreen from "../screens/SignInScreen";
 import VerifyOtpScreen from "../screens/VerifyOtpScreen";
 import ProfileSetup from "../screens/ProfileSetup";
@@ -10,6 +10,7 @@ import Profile from "../screens/Profile";
 import KeepDetail from "../screens/KeepDetail";
 import PhotoDetail from "../screens/PhotoDetail";
 import CreateKeep from "../screens/CreateKeep";
+import CreateKeepCover from "../screens/CreateKeepCover";
 import AddPost from "../screens/AddPost";
 import EditPost from "../screens/EditPost";
 import EditKeep from "../screens/EditKeep";
@@ -27,6 +28,7 @@ import Feed from "../screens/Feed";
 import MoveToKeep from "../screens/MoveToKeep";
 import IconButton from "../components/IconButton";
 import { spacing } from "../theme/tokens";
+import type { PrivacyMode } from "../types/database";
 
 export type AuthStackParamList = {
   SignIn: undefined;
@@ -38,6 +40,7 @@ export type AppStackParamList = {
   KeepDetail: { keepId: string };
   PhotoDetail: { postId: string };
   CreateKeep: undefined;
+  CreateKeepCover: { title: string; privacyMode: PrivacyMode; hiddenFromProfile: boolean };
   AddPost: { keepId: string };
   EditPost: { postId: string };
   EditKeep: { keepId: string };
@@ -84,10 +87,11 @@ function MainNavigator() {
       />
       <AppStack.Screen name="KeepDetail" component={KeepDetail} options={{ headerTitle: "" }} />
       <AppStack.Screen name="PhotoDetail" component={PhotoDetail} options={{ headerTitle: "" }} />
-      <AppStack.Screen name="CreateKeep" component={CreateKeep} options={{ headerTitle: "" }} />
+      <AppStack.Screen name="CreateKeep" component={CreateKeep} options={{ title: "New keep" }} />
+      <AppStack.Screen name="CreateKeepCover" component={CreateKeepCover} options={{ headerTitle: "" }} />
       <AppStack.Screen name="AddPost" component={AddPost} options={{ title: "Post" }} />
       <AppStack.Screen name="EditPost" component={EditPost} options={{ title: "Edit post" }} />
-      <AppStack.Screen name="EditKeep" component={EditKeep} options={{ headerTitle: "" }} />
+      <AppStack.Screen name="EditKeep" component={EditKeep} options={{ title: "Edit keep" }} />
       <AppStack.Screen name="EditProfile" component={EditProfile} options={{ title: "Profile settings" }} />
       <AppStack.Screen name="Notifications" component={Notifications} options={{ title: "Notifications" }} />
       <AppStack.Screen name="Favorites" component={Favorites} options={{ title: "Favorites" }} />
@@ -99,7 +103,13 @@ function MainNavigator() {
       <AppStack.Screen
         name="ManageCoOwners"
         component={ManageCoOwners}
-        options={{ title: "Collaborators" }}
+        options={{
+          headerShown: false,
+          presentation: "formSheet",
+          sheetAllowedDetents: "fitToContents",
+          sheetGrabberVisible: true,
+          sheetCornerRadius: radii.lg,
+        }}
       />
       <AppStack.Screen name="Invites" component={Invites} options={{ title: "Invites" }} />
       <AppStack.Screen

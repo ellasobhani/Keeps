@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   buttonText: {
     color: colors.textInverse,

@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, Switch, ActivityIndicator, Alert, Dimensions, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { File, Paths } from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParamList } from "../navigation/AppNavigator";
@@ -13,24 +14,26 @@ import {
   reorderPostMedia,
   updatePostMediaUrl,
   deletePostMedia,
+  addPostMedia,
 } from "../lib/queries";
 import { getSignedMediaUrl } from "../lib/storage";
 import { uploadPostMedia } from "../lib/storage";
 import { computeBlurhash } from "../lib/blurhash";
 import { SIGNED_URL_QUERY_OPTIONS, signedMediaUrlKey, postsForKeepKey } from "../lib/signedUrlCache";
 import { getErrorMessage } from "../lib/errors";
-import Button from "../components/Button";
 import SortableGrid from "../components/SortableGrid";
 import PhotoEditor from "../components/PhotoEditor";
 import KeyboardAvoidingScreen from "../components/KeyboardAvoidingScreen";
-import { colors, spacing, radii, typography } from "../theme/tokens";
-import type { PostMedia } from "../types/database";
+import { colors, spacing, radii, typography, iconGlyphFix } from "../theme/tokens";
+import type { MediaType, PostMedia } from "../types/database";
 
 type Props = NativeStackScreenProps<AppStackParamList, "EditPost">;
 
 const GRID_COLUMNS = 3;
 const GRID_GAP = spacing.xs;
 const GRID_TILE_SIZE = (Dimensions.get("window").width - spacing.lg * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
+const MAX_ITEMS = 10;
+const VIDEO_MAX_DURATION_SECONDS = 60;
 
 function MediaThumb({ media }: { media: PostMedia }) {
   const { data: url } = useQuery({
@@ -79,6 +82,7 @@ export default function EditPost({ route, navigation }: Props) {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [mediaEdited, setMediaEdited] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [isAddingMedia, setIsAddingMedia] = useState(false);
 
   useEffect(() => {
     if (!post || isHydrated) return;
@@ -116,7 +120,12 @@ export default function EditPost({ route, navigation }: Props) {
         queryFn: () => getSignedMediaUrl(media.media_url),
         ...SIGNED_URL_QUERY_OPTIONS,
       });
-      const file = await File.downloadFileAsync(signedUrl, Paths.cache);
+      // idempotent: true — the destination filename is derived from the
+      // signed URL's path, which is stable for a given media item, so
+      // re-opening the editor on the same photo (after a cancel, or just a
+      // second attempt) collides with the previous download's leftover
+      // cache file and throws "Destination already exists" without this.
+      const file = await File.downloadFileAsync(signedUrl, Paths.cache, { idempotent: true });
       setEditingMedia(media);
       setEditingLocalUri(file.uri);
     } catch (e) {
@@ -149,6 +158,19 @@ export default function EditPost({ route, navigation }: Props) {
     ]);
   };
 
+  // One "..." badge per tile replaces separate always-visible crop/trash
+  // badges — drag-to-reorder is still a plain long-press on the tile itself
+  // (see SortableGrid), so this only ever gates the two less-common actions.
+  const handlePhotoOptions = (media: PostMedia) => {
+    const actions: { text: string; style?: "destructive" | "cancel"; onPress?: () => void }[] = [];
+    if (media.media_type === "image") {
+      actions.push({ text: "Edit photo", onPress: () => handleEditPress(media) });
+    }
+    actions.push({ text: "Remove photo", style: "destructive", onPress: () => handleDeleteMedia(media) });
+    actions.push({ text: "Cancel", style: "cancel" });
+    Alert.alert("", "", actions);
+  };
+
   // Applies immediately (unlike caption/reorder, which wait for "Save
   // changes") — re-uploading is already its own committed write, and
   // deferring it would mean juggling a second pending-edits map just to
@@ -171,6 +193,47 @@ export default function EditPost({ route, navigation }: Props) {
       setEditError(getErrorMessage(e));
     } finally {
       setIsSavingEdit(false);
+    }
+  };
+
+  // Applies immediately, same as handleEditSave above — the upload/insert is
+  // already its own committed write, so there's no local-only "pending add"
+  // state to juggle or undo on cancel.
+  const handleAddMedia = async () => {
+    if (!post || mediaOrder.length >= MAX_ITEMS) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setEditError("Photo library access is needed to add photos or videos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images", "videos"],
+      allowsMultipleSelection: true,
+      orderedSelection: true,
+      selectionLimit: MAX_ITEMS - mediaOrder.length,
+      quality: 0.8,
+      videoMaxDuration: VIDEO_MAX_DURATION_SECONDS,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    setEditError(null);
+    setIsAddingMedia(true);
+    try {
+      let position = mediaOrder.length;
+      for (const asset of result.assets) {
+        const mediaType: MediaType = asset.type === "video" ? "video" : "image";
+        const [path, blurhash] = await Promise.all([
+          uploadPostMedia(post.keep_id, postId, asset.uri, position),
+          mediaType === "image" ? computeBlurhash(asset.uri) : Promise.resolve(null),
+        ]);
+        const newMedia = await addPostMedia(postId, path, position, mediaType, blurhash);
+        setMediaOrder((prev) => [...prev, newMedia]);
+        position++;
+      }
+      setMediaEdited(true);
+    } catch (e) {
+      setEditError(getErrorMessage(e));
+    } finally {
+      setIsAddingMedia(false);
     }
   };
 
@@ -235,6 +298,40 @@ export default function EditPost({ route, navigation }: Props) {
     ]);
   };
 
+  // handleSubmit closes over caption/songTitle/etc., so it's a fresh
+  // function every render — putting it directly in the effect below's deps
+  // would re-run navigation.setOptions (and hand native-stack a brand new
+  // headerLeft/headerRight) on every keystroke and every unrelated state
+  // change in this screen (e.g. the preparingMediaId/isAddingMedia flips
+  // during handleEditPress/handleAddMedia). Rebuilding the native header
+  // that rapidly is what was corrupting the header bar and swipe-back
+  // gesture. Routing the tap through a ref keeps the effect's deps limited
+  // to what the header actually needs to redraw for, while Save still
+  // always calls the latest handleSubmit.
+  const handleSubmitRef = useRef(handleSubmit);
+  handleSubmitRef.current = handleSubmit;
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerTitleStyle: { fontFamily: typography.family.serif, fontSize: typography.size.lg, color: colors.textPrimary },
+      headerLeft: () => (
+        <Pressable onPress={() => navigation.goBack()} disabled={isSaving || isDeleting} hitSlop={8}>
+          <Text style={styles.headerCancel}>Cancel</Text>
+        </Pressable>
+      ),
+      headerRight: () => (
+        <Pressable onPress={() => handleSubmitRef.current()} disabled={isSaving || isDeleting} hitSlop={8}>
+          {isSaving ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Text style={[styles.headerSave, isDeleting && styles.headerSaveDisabled]}>Save</Text>
+          )}
+        </Pressable>
+      ),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, isSaving, isDeleting]);
+
   if (isLoading || !post) {
     return (
       <View style={styles.loading}>
@@ -243,56 +340,67 @@ export default function EditPost({ route, navigation }: Props) {
     );
   }
 
-  const gridRows = Math.ceil(mediaOrder.length / GRID_COLUMNS);
+  const addTileIndex = mediaOrder.length < MAX_ITEMS ? mediaOrder.length : -1;
+  const addTileCol = addTileIndex % GRID_COLUMNS;
+  const addTileRow = Math.floor(addTileIndex / GRID_COLUMNS);
+  const gridSlotCount = addTileIndex === -1 ? mediaOrder.length : mediaOrder.length + 1;
+  const gridRows = Math.ceil(gridSlotCount / GRID_COLUMNS);
   const gridWidth = GRID_COLUMNS * GRID_TILE_SIZE + (GRID_COLUMNS - 1) * GRID_GAP;
   const gridHeight = gridRows > 0 ? gridRows * GRID_TILE_SIZE + (gridRows - 1) * GRID_GAP : 0;
 
   return (
     <KeyboardAvoidingScreen contentContainerStyle={styles.content}>
-        {mediaOrder.length > 0 && (
-          <>
-            <Text style={styles.label}>
-              {mediaOrder.length > 1 ? "Photos — hold and drag to reorder" : "Photo"}
-            </Text>
-            <View style={[styles.gridWrap, { width: gridWidth, height: gridHeight }]}>
-              <SortableGrid
-                data={mediaOrder}
-                keyExtractor={(media) => media.id}
-                numColumns={GRID_COLUMNS}
-                itemSize={GRID_TILE_SIZE}
-                gap={GRID_GAP}
-                onDragEnd={setMediaOrder}
-                renderItem={(media) => <MediaThumb media={media} />}
-                renderOverlay={(media) => (
-                  <>
-                    {media.media_type === "image" && (
-                      <Pressable
-                        style={styles.editBadge}
-                        onPress={() => handleEditPress(media)}
-                        hitSlop={8}
-                      >
-                        {preparingMediaId === media.id ? (
-                          <ActivityIndicator size="small" color={colors.textInverse} />
-                        ) : (
-                          <Ionicons name="crop-outline" size={14} color={colors.textInverse} />
-                        )}
-                      </Pressable>
-                    )}
-                    <Pressable style={styles.trashBadge} onPress={() => handleDeleteMedia(media)} hitSlop={8}>
-                      <Ionicons name="trash-outline" size={14} color={colors.textInverse} />
-                    </Pressable>
-                  </>
+        <Text style={styles.eyebrow}>
+          {mediaOrder.length > 1 ? "Photos · hold & drag to reorder" : mediaOrder.length === 1 ? "Photo" : "Add a photo"}
+        </Text>
+        <View style={[styles.gridWrap, { width: gridWidth, height: gridHeight }]}>
+          <SortableGrid
+            data={mediaOrder}
+            keyExtractor={(media) => media.id}
+            numColumns={GRID_COLUMNS}
+            itemSize={GRID_TILE_SIZE}
+            gap={GRID_GAP}
+            onDragEnd={setMediaOrder}
+            renderItem={(media) => <MediaThumb media={media} />}
+            renderOverlay={(media) => (
+              <Pressable style={styles.optionsBadge} onPress={() => handlePhotoOptions(media)} hitSlop={8}>
+                {preparingMediaId === media.id ? (
+                  <ActivityIndicator size="small" color={colors.textInverse} />
+                ) : (
+                  <Ionicons name="ellipsis-horizontal" size={14} color={colors.textInverse} style={iconGlyphFix(14)} />
                 )}
-              />
-            </View>
-            {isSavingEdit && <Text style={styles.savingHint}>Saving photo edit...</Text>}
-            {editError && <Text style={styles.error}>{editError}</Text>}
-          </>
-        )}
+              </Pressable>
+            )}
+          />
+          {addTileIndex !== -1 && (
+            <Pressable
+              style={[
+                styles.addTile,
+                {
+                  width: GRID_TILE_SIZE,
+                  height: GRID_TILE_SIZE,
+                  position: "absolute",
+                  left: addTileCol * (GRID_TILE_SIZE + GRID_GAP),
+                  top: addTileRow * (GRID_TILE_SIZE + GRID_GAP),
+                },
+              ]}
+              onPress={handleAddMedia}
+              disabled={isAddingMedia}
+            >
+              {isAddingMedia ? (
+                <ActivityIndicator color={colors.textSecondary} />
+              ) : (
+                <Ionicons name="add" size={28} color={colors.textSecondary} style={iconGlyphFix(28)} />
+              )}
+            </Pressable>
+          )}
+        </View>
+        {isSavingEdit && <Text style={styles.savingHint}>Saving photo edit...</Text>}
+        {isAddingMedia && <Text style={styles.savingHint}>Adding photo...</Text>}
+        {editError && <Text style={styles.error}>{editError}</Text>}
 
-        <Text style={styles.label}>Caption</Text>
         <TextInput
-          style={[styles.input, styles.multiline]}
+          style={styles.captionInput}
           value={caption}
           onChangeText={setCaption}
           placeholder="Write a caption..."
@@ -300,16 +408,40 @@ export default function EditPost({ route, navigation }: Props) {
           multiline
         />
 
-        {!isSongOpen ? (
-          <Pressable style={styles.addonRow} onPress={() => setIsSongOpen(true)}>
-            <Text style={styles.addonRowText}>Add song</Text>
+        <View style={styles.divider} />
+
+        <Text style={styles.eyebrow}>Details</Text>
+        <View style={styles.chipRow}>
+          <Pressable
+            style={[styles.chip, isSongOpen && styles.chipActive]}
+            onPress={() => setIsSongOpen((v) => !v)}
+          >
+            <Ionicons
+              name="musical-notes-outline"
+              size={14}
+              color={isSongOpen ? colors.accent : colors.textSecondary}
+            />
+            <Text style={[styles.chipText, isSongOpen && styles.chipTextActive]}>Song</Text>
           </Pressable>
-        ) : (
+          <Pressable
+            style={[styles.chip, isLocationOpen && styles.chipActive]}
+            onPress={() => setIsLocationOpen((v) => !v)}
+          >
+            <Ionicons
+              name="location-outline"
+              size={14}
+              color={isLocationOpen ? colors.accent : colors.textSecondary}
+            />
+            <Text style={[styles.chipText, isLocationOpen && styles.chipTextActive]}>Location</Text>
+          </Pressable>
+        </View>
+
+        {isSongOpen && (
           <View style={styles.addonSection}>
             <View style={styles.addonHeader}>
               <Text style={styles.addonTitle}>Song</Text>
               <Pressable onPress={clearSong} hitSlop={8}>
-                <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                <Ionicons name="trash-outline" size={16} color={colors.danger} style={iconGlyphFix(16)} />
               </Pressable>
             </View>
             <TextInput
@@ -338,16 +470,12 @@ export default function EditPost({ route, navigation }: Props) {
           </View>
         )}
 
-        {!isLocationOpen ? (
-          <Pressable style={styles.addonRow} onPress={() => setIsLocationOpen(true)}>
-            <Text style={styles.addonRowText}>Add location</Text>
-          </Pressable>
-        ) : (
+        {isLocationOpen && (
           <View style={styles.addonSection}>
             <View style={styles.addonHeader}>
               <Text style={styles.addonTitle}>Location</Text>
               <Pressable onPress={clearLocation} hitSlop={8}>
-                <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                <Ionicons name="trash-outline" size={16} color={colors.danger} style={iconGlyphFix(16)} />
               </Pressable>
             </View>
             <TextInput
@@ -378,22 +506,25 @@ export default function EditPost({ route, navigation }: Props) {
 
         {error && <Text style={styles.error}>{error}</Text>}
 
-        <Button label="Save changes" onPress={handleSubmit} loading={isSaving} disabled={isDeleting} />
-        <Button
-          label="Move to another keep"
-          variant="secondary"
+        <View style={styles.divider} />
+
+        <Pressable
+          style={styles.listRow}
           onPress={() => navigation.navigate("MoveToKeep", { postId })}
           disabled={isSaving || isDeleting}
-          style={styles.moveButton}
-        />
-        <Button
-          label="Delete post"
-          variant="danger"
-          onPress={handleDelete}
-          loading={isDeleting}
-          disabled={isSaving}
-          style={styles.deleteButton}
-        />
+        >
+          <Text style={styles.listRowText}>Move to another keep</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+        </Pressable>
+
+        <Pressable style={styles.listRow} onPress={handleDelete} disabled={isSaving || isDeleting}>
+          <Text style={[styles.listRowText, styles.deleteText]}>Delete post</Text>
+          {isDeleting ? (
+            <ActivityIndicator size="small" color={colors.danger} />
+          ) : (
+            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+          )}
+        </Pressable>
 
         <PhotoEditor
           visible={editingLocalUri !== null}
@@ -416,20 +547,18 @@ const styles = StyleSheet.create({
   gridImage: {
     width: "100%",
     height: "100%",
+    borderRadius: radii.md,
     backgroundColor: colors.surface,
   },
-  editBadge: {
-    position: "absolute",
-    top: spacing.xs,
-    left: spacing.xs,
-    width: 24,
-    height: 24,
-    borderRadius: radii.pill,
+  addTile: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: "dashed",
+    borderRadius: radii.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.55)",
   },
-  trashBadge: {
+  optionsBadge: {
     position: "absolute",
     top: spacing.xs,
     right: spacing.xs,
@@ -438,7 +567,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: colors.scrim,
   },
   savingHint: {
     fontSize: typography.size.xs,
@@ -451,11 +580,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.background,
   },
-  label: {
+  headerCancel: {
     fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
+    color: colors.textSecondary,
+  },
+  headerSave: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.accent,
+  },
+  headerSaveDisabled: {
+    opacity: 0.4,
+  },
+  eyebrow: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: typography.letterSpacing.wide,
+    marginBottom: spacing.sm,
+  },
+  captionInput: {
+    padding: 0,
+    fontSize: typography.size.md,
     color: colors.textPrimary,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.lg,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginBottom: spacing.lg,
   },
   input: {
     borderWidth: 1,
@@ -466,22 +620,31 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginBottom: spacing.md,
   },
-  multiline: {
-    minHeight: 80,
-    textAlignVertical: "top",
-  },
-  addonRow: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.xs,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
     marginBottom: spacing.md,
   },
-  addonRowText: {
-    color: colors.textSecondary,
-    fontSize: typography.size.md,
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+  },
+  chipActive: {
+    backgroundColor: colors.accentMuted,
+  },
+  chipText: {
+    fontSize: typography.size.sm,
     fontWeight: typography.weight.medium,
+    color: colors.textPrimary,
+  },
+  chipTextActive: {
+    color: colors.accent,
   },
   addonSection: {
     borderWidth: 1,
@@ -518,10 +681,18 @@ const styles = StyleSheet.create({
     color: colors.danger,
     marginBottom: spacing.md,
   },
-  moveButton: {
-    marginTop: spacing.sm,
+  listRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.md,
   },
-  deleteButton: {
-    marginTop: spacing.sm,
+  listRowText: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.medium,
+    color: colors.textPrimary,
+  },
+  deleteText: {
+    color: colors.danger,
   },
 });

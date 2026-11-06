@@ -1,4 +1,5 @@
 import { StatusBar } from "expo-status-bar";
+import { useFonts, Lora_600SemiBold } from "@expo-google-fonts/lora";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
@@ -22,6 +23,9 @@ const persister = createAsyncStoragePersister({
 });
 
 export default function App() {
+  const [fontsLoaded] = useFonts({ Lora_600SemiBold });
+  if (!fontsLoaded) return null;
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

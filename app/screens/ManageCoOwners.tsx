@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { View, Text, TextInput, FlatList, Pressable, ActivityIndicator, StyleSheet } from "react-native";
+import { useEffect, useState } from "react";
+import { View, Text, TextInput, FlatList, Pressable, ActivityIndicator, Alert, StyleSheet } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParamList } from "../navigation/AppNavigator";
@@ -7,17 +7,16 @@ import { useAuth } from "../lib/AuthProvider";
 import {
   fetchKeepCoOwners,
   fetchPendingCoOwnerInvites,
-  fetchProfileByHandle,
+  searchProfiles,
   inviteCoOwner,
   removeCoOwner,
 } from "../lib/queries";
-import { Ionicons } from "@expo/vector-icons";
 import { getErrorMessage } from "../lib/errors";
-import Button from "../components/Button";
-import IconButton from "../components/IconButton";
+import { getAvatarUrl } from "../lib/storage";
+import Avatar from "../components/Avatar";
 import KeyboardAvoidingScreen from "../components/KeyboardAvoidingScreen";
 import { colors, spacing, radii, typography } from "../theme/tokens";
-import type { KeepMemberWithProfile } from "../types/database";
+import type { KeepMemberWithProfile, Profile } from "../types/database";
 
 type Props = NativeStackScreenProps<AppStackParamList, "ManageCoOwners">;
 
@@ -26,10 +25,22 @@ export default function ManageCoOwners({ route, navigation }: Props) {
   const { session } = useAuth();
   const queryClient = useQueryClient();
 
-  const [handle, setHandle] = useState("");
-  const [isInviting, setIsInviting] = useState(false);
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [input, setInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [invitingId, setInvitingId] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // Simple debounce — same as Search.tsx's people search, which this
+  // reuses. The previous version required typing someone's exact full
+  // handle before it would even look them up, so anything short of that
+  // just silently found no one; live results as you type actually show
+  // matches.
+  useEffect(() => {
+    const timeout = setTimeout(() => setQuery(input.trim()), 300);
+    return () => clearTimeout(timeout);
+  }, [input]);
 
   const { data: coOwners = [], isLoading: isCoOwnersLoading } = useQuery({
     queryKey: ["keepCoOwners", keepId],
@@ -41,37 +52,38 @@ export default function ManageCoOwners({ route, navigation }: Props) {
     queryFn: () => fetchPendingCoOwnerInvites(keepId),
   });
 
+  const { data: searchResults = [], isLoading: isSearching } = useQuery({
+    queryKey: ["searchProfiles", query],
+    enabled: query.length > 0,
+    queryFn: () => searchProfiles(query),
+  });
+
+  const inviteableResults = searchResults.filter(
+    (profile) =>
+      profile.id !== session?.user.id &&
+      !coOwners.some((m) => m.profile_id === profile.id) &&
+      !pendingInvites.some((m) => m.profile_id === profile.id)
+  );
+
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ["keepCoOwners", keepId] }),
       queryClient.invalidateQueries({ queryKey: ["pendingCoOwnerInvites", keepId] }),
     ]);
 
-  const handleInvite = async () => {
-    if (!handle.trim()) return;
+  const handleInvite = async (profile: Profile) => {
     setInviteError(null);
-    setIsInviting(true);
+    setInvitingId(profile.id);
     try {
-      const profile = await fetchProfileByHandle(handle.trim());
-      if (!profile) {
-        setInviteError("No one found with that handle.");
-        return;
-      }
-      if (coOwners.some((m) => m.profile_id === profile.id)) {
-        setInviteError(`@${profile.handle} is already a co-owner.`);
-        return;
-      }
-      if (pendingInvites.some((m) => m.profile_id === profile.id)) {
-        setInviteError(`@${profile.handle} already has a pending invite.`);
-        return;
-      }
       await inviteCoOwner(keepId, profile.id);
-      setHandle("");
+      setInput("");
+      setQuery("");
+      setIsInviteOpen(false);
       await refresh();
     } catch (e) {
       setInviteError(getErrorMessage(e));
     } finally {
-      setIsInviting(false);
+      setInvitingId(null);
     }
   };
 
@@ -88,73 +100,64 @@ export default function ManageCoOwners({ route, navigation }: Props) {
     }
   };
 
-  const renderMemberRow = (item: KeepMemberWithProfile, isPending: boolean) => {
+  const ownMembership = coOwners.find((m) => m.profile_id === session?.user.id);
+  const isLastCoOwner = coOwners.length <= 1;
+
+  const confirmRemove = (item: KeepMemberWithProfile, isPending: boolean) => {
     const isSelf = item.profile_id === session?.user.id;
     const isOnlyCoOwner = !isPending && coOwners.length <= 1;
+    if (isOnlyCoOwner || processingId) return;
+    const title = isPending
+      ? `Cancel ${item.profiles.display_name}'s invite?`
+      : isSelf
+        ? "Leave this keep?"
+        : `Remove ${item.profiles.display_name}?`;
+    Alert.alert(title, undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: isPending ? "Cancel invite" : isSelf ? "Leave" : "Remove",
+        style: "destructive",
+        onPress: () => handleRemove(item.profile_id),
+      },
+    ]);
+  };
+
+  const renderMemberRow = (item: KeepMemberWithProfile, isPending: boolean) => {
+    const isSelf = item.profile_id === session?.user.id;
+    // keep_members.role ("owner" vs "contributor") is unused dead weight
+    // since 0006_collaborative_keeps.sql — every approved member has equal
+    // rights, so the label shouldn't imply a hierarchy that isn't there.
+    const roleLabel = isPending ? "Invited" : "Co-owner";
     return (
-      <View style={styles.row} key={item.profile_id}>
-        <Pressable
-          style={styles.identity}
-          onPress={() => navigation.navigate("PublicProfile", { profileId: item.profile_id })}
-        >
-          <Text style={styles.name}>
-            {item.profiles.display_name}
-            {isSelf && " (you)"}
-          </Text>
-          <Text style={styles.handle}>
-            @{item.profiles.handle}
-            {isPending && " · invited"}
-          </Text>
-        </Pressable>
-        {isPending || isSelf ? (
-          <Button
-            label={isPending ? "Cancel" : "Leave"}
-            variant={isPending ? "secondary" : "danger"}
-            disabled={processingId === item.profile_id || isOnlyCoOwner}
-            loading={processingId === item.profile_id}
-            onPress={() => handleRemove(item.profile_id)}
-            style={styles.actionButton}
-          />
-        ) : processingId === item.profile_id ? (
-          <ActivityIndicator color={colors.danger} style={styles.removeLoader} />
+      <Pressable
+        style={styles.row}
+        key={item.profile_id}
+        onPress={() => navigation.navigate("PublicProfile", { profileId: item.profile_id })}
+        onLongPress={() => confirmRemove(item, isPending)}
+      >
+        <Avatar
+          uri={item.profiles.avatar_url ? getAvatarUrl(item.profiles.avatar_url) : null}
+          displayName={item.profiles.display_name}
+          size={48}
+        />
+        <Text style={styles.name} numberOfLines={1}>
+          {item.profiles.display_name}
+          {isSelf && " (you)"}
+        </Text>
+        {processingId === item.profile_id ? (
+          <ActivityIndicator color={colors.textSecondary} />
         ) : (
-          <IconButton
-            name="trash-outline"
-            color={colors.danger}
-            disabled={isOnlyCoOwner}
-            onPress={() => handleRemove(item.profile_id)}
-          />
+          <Text style={styles.role}>{roleLabel}</Text>
         )}
-      </View>
+      </Pressable>
     );
   };
 
   return (
     <KeyboardAvoidingScreen contentContainerStyle={styles.content}>
-      <Text style={styles.label}>Invite a co-owner</Text>
-      <Text style={styles.hint}>
-        Co-owners can post, edit settings, invite others, and delete this keep — same as you.
-      </Text>
-      <View style={styles.inviteRow}>
-        <TextInput
-          style={styles.input}
-          value={handle}
-          onChangeText={(text) => {
-            setHandle(text);
-            setInviteError(null);
-          }}
-          placeholder="handle"
-          placeholderTextColor={colors.textSecondary}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="done"
-          onSubmitEditing={handleInvite}
-        />
-        <Button label="Invite" disabled={!handle.trim()} loading={isInviting} onPress={handleInvite} />
-      </View>
-      {inviteError && <Text style={styles.error}>{inviteError}</Text>}
+      <Text style={styles.heading}>Collaborators</Text>
+      <Text style={styles.hint}>Anyone added can post and see everything in this keep.</Text>
 
-      <Text style={styles.sectionLabel}>Co-owners</Text>
       {isCoOwnersLoading && <ActivityIndicator color={colors.accent} style={styles.loader} />}
       <FlatList
         data={coOwners}
@@ -164,17 +167,82 @@ export default function ManageCoOwners({ route, navigation }: Props) {
       />
 
       {pendingInvites.length > 0 && (
-        <>
-          <Text style={styles.sectionLabel}>Pending invites</Text>
-          <FlatList
-            data={pendingInvites}
-            keyExtractor={(item) => item.profile_id}
-            scrollEnabled={false}
-            renderItem={({ item }) => renderMemberRow(item, true)}
-          />
-        </>
+        <FlatList
+          data={pendingInvites}
+          keyExtractor={(item) => item.profile_id}
+          scrollEnabled={false}
+          renderItem={({ item }) => renderMemberRow(item, true)}
+        />
       )}
       {isPendingLoading && <ActivityIndicator color={colors.accent} style={styles.loader} />}
+
+      {isInviteOpen ? (
+        <View style={styles.inviteSection}>
+          <TextInput
+            style={styles.input}
+            value={input}
+            onChangeText={(text) => {
+              setInput(text);
+              setInviteError(null);
+            }}
+            placeholder="Search by handle or name"
+            placeholderTextColor={colors.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoFocus
+            returnKeyType="search"
+          />
+          {isSearching && <ActivityIndicator color={colors.accent} style={styles.loader} />}
+          {query.length > 0 && !isSearching && (
+            <FlatList
+              data={inviteableResults}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              ListEmptyComponent={<Text style={styles.searchEmpty}>No one found.</Text>}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={styles.row}
+                  onPress={() => handleInvite(item)}
+                  disabled={invitingId !== null}
+                >
+                  <Avatar
+                    uri={item.avatar_url ? getAvatarUrl(item.avatar_url) : null}
+                    displayName={item.display_name}
+                    size={40}
+                  />
+                  <Text style={styles.name} numberOfLines={1}>
+                    {item.display_name}
+                  </Text>
+                  {invitingId === item.id ? (
+                    <ActivityIndicator color={colors.textSecondary} />
+                  ) : (
+                    <Text style={styles.role}>@{item.handle}</Text>
+                  )}
+                </Pressable>
+              )}
+            />
+          )}
+        </View>
+      ) : (
+        <Pressable style={styles.invitePill} onPress={() => setIsInviteOpen(true)}>
+          <Text style={styles.invitePillText}>Invite people</Text>
+        </Pressable>
+      )}
+      {inviteError && <Text style={styles.error}>{inviteError}</Text>}
+
+      {ownMembership && (
+        <Pressable
+          style={[styles.invitePill, styles.leaveButton, (isLastCoOwner || processingId !== null) && styles.disabled]}
+          onPress={() => confirmRemove(ownMembership, false)}
+          disabled={isLastCoOwner || processingId !== null}
+        >
+          {processingId === ownMembership.profile_id ? (
+            <ActivityIndicator color={colors.textPrimary} />
+          ) : (
+            <Text style={styles.invitePillText}>Leave keep</Text>
+          )}
+        </Pressable>
+      )}
     </KeyboardAvoidingScreen>
   );
 }
@@ -183,41 +251,16 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
   },
-  label: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
+  heading: {
+    fontFamily: typography.family.serif,
+    fontSize: typography.size.xl,
     color: colors.textPrimary,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   hint: {
     fontSize: typography.size.sm,
     color: colors.textSecondary,
-    marginBottom: spacing.md,
-  },
-  inviteRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    alignItems: "center",
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.xs,
-    padding: spacing.md,
-    fontSize: typography.size.md,
-    color: colors.textPrimary,
-  },
-  error: {
-    color: colors.danger,
-    marginTop: spacing.sm,
-  },
-  sectionLabel: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.textPrimary,
-    marginTop: spacing.xl,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.lg,
   },
   loader: {
     marginTop: spacing.md,
@@ -225,32 +268,56 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  identity: {
-    flex: 1,
+    paddingVertical: spacing.sm,
   },
   name: {
+    flex: 1,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.medium,
+    color: colors.textPrimary,
+  },
+  role: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+  },
+  inviteSection: {
+    marginTop: spacing.md,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.xs,
+    padding: spacing.md,
+    fontSize: typography.size.md,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  searchEmpty: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  invitePill: {
+    marginTop: spacing.md,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+  },
+  invitePillText: {
     fontSize: typography.size.md,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
   },
-  handle: {
-    fontSize: typography.size.sm,
-    color: colors.textSecondary,
-    marginTop: 2,
+  error: {
+    color: colors.danger,
+    marginTop: spacing.sm,
   },
-  actionButton: {
-    minWidth: 88,
+  leaveButton: {
+    marginTop: spacing.lg,
   },
-  removeLoader: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
+  disabled: {
+    opacity: 0.4,
   },
 });
